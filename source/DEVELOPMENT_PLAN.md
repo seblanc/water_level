@@ -5,7 +5,7 @@ Status markers:
 - `[x]` done and observable in this repo (for code this means **written**, not compiled or run)
 - `[ ]` not done
 
-Last updated: run #3, ARCHITECTURE phase (attempt 1), 2026-10-16.
+Last updated: run #3, IMPLEMENTATION phase (attempt 2), 2026-10-16.
 
 ## Milestones
 
@@ -46,11 +46,17 @@ Last updated: run #3, ARCHITECTURE phase (attempt 1), 2026-10-16.
 - [x] VERIFICATION_MATRIX.md results set to `NOT VERIFIED`; table of unverified acceptance criteria added
 - [ ] Operator decision: keep `WT_SENSOR_TX_GPIO=17` (current) or default it to -1 (F-13)
 
+### M4d — Run #3 implementation (attempt 2; static only, not compiled)
+- [x] Confirmed from git status that the tree is committed (`65c6ad9`) and the worktree was clean at phase start. F-15 should no longer block CI; the next builder result must confirm it
+- [x] Static re-read of all firmware sources, CMake files and host tests: no defects found
+- [x] F-08: `level_report` sink dispatcher (`level_report.c`, `level_report_add_sink`, `LEVEL_REPORT_MAX_SINKS`). The console sink moved behind it with identical output
+
 ### M5 — Build and bench verification (needs a toolchain and hardware; operator or a bench-enabled phase)
 Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRIX.md:
 
 **Precondition:** commit the whole `source/` tree (platform/operator; agents have no git).
-Build #1 was blocked by the dirty worktree (F-15, G12).
+Build #1 was blocked by the dirty worktree (F-15, G12). The platform has since committed
+the tree (`65c6ad9`), and it is expected to commit this phase's changes as well.
 
 0. [ ] V-04 wiring inspection **before power-up** (sensor TX → GPIO16; F-13)
 1. [ ] V-09 `make -C test/host run`, and V-09b `python3 test/bench/test_check_log.py`
@@ -66,7 +72,8 @@ Build #1 was blocked by the dirty worktree (F-15, G12).
 - [ ] Confirm the integration path and broker with the operator (G5; recommended: MQTT + HA discovery)
 - [ ] Wi-Fi STA with reconnect/backoff; credentials via a local, git-ignored Kconfig or NVS
 - [ ] `esp-mqtt` client, availability/LWT, retained discovery config
-- [ ] `level_report` fan-out + non-blocking MQTT sink (depth-1 overwrite queue + MQTT task)
+- [x] `level_report` fan-out (run #3, written, not compiled)
+- [ ] Non-blocking MQTT sink (depth-1 overwrite queue + MQTT task), registered with `level_report_add_sink`
 - [ ] Tank geometry → `level_percent` (G8)
 - [ ] (Optional) OTA
 

@@ -119,7 +119,7 @@ too short for the check). The checker and its self-tests have not been run yet.
 ```
 main/                      app_main, banner, 1 Hz reporter task, Kconfig
 components/a02yyuw/        sensor driver (UART2 + RX task) and pure-C parser/filter
-components/level_report/   report sink interface; Stage 1 = console lines
+components/level_report/   report dispatcher (level_report_add_sink); Stage 1 = console sink
 test/host/                 host unit tests for parser/filter
 test/bench/                offline log checker for bench captures + its self-tests
 ```

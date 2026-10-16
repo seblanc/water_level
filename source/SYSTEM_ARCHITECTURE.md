@@ -16,6 +16,12 @@ Status history:
   All project files are untracked, so nothing was compiled (F-15, G12). Added the CI build
   path and CI-artifact flashing to §4 (G13). F-16 covers bench evidence files hidden by
   `.gitignore`.
+- Run #3, IMPLEMENTATION phase (attempt 2, 2026-10-16): Git status at phase start was
+  **clean**. Commit `65c6ad9` ("MOTHER run 3 architecture attempt 1: phase_complete")
+  contains the whole tree, so the platform commits at the end of each phase. F-15 should
+  therefore not block the next CI build, but no new builder result exists yet. Static
+  re-read found no defects. Implemented the `level_report` sink fan-out (F-08, M6
+  groundwork). The console output is unchanged (§3.3).
 
 **Nothing has been compiled, flashed, or tested on hardware.** No agent phase so far had a
 shell, a toolchain, or bench access. Hardware facts below either come from the project
@@ -109,9 +115,11 @@ source/
 │   │   ├── a02yyuw.c                  # UART install, event-driven RX task, latest sample
 │   │   ├── a02yyuw_parser.c
 │   │   └── a02yyuw_filter.c
-│   └── level_report/              # sink interface; Stage 1 = console line
-│       ├── include/level_report.h
-│       └── level_report_uart.c
+│   └── level_report/              # sink dispatcher; Stage 1 = console sink
+│       ├── include/level_report.h     # reading type, sink type, dispatcher API
+│       ├── level_report.c             # sink registry + fan-out, status strings
+│       ├── level_report_priv.h        # component-internal: console sink prototype
+│       └── level_report_uart.c        # console sink (§8 report line)
 └── test/
     ├── host/                      # host unit tests (gcc/cc, no IDF)
     │   ├── Makefile               # make -C test/host run
@@ -160,10 +168,17 @@ source/
 - `a02yyuw_get_latest()` returns `true` only if a sample exists and is ≤ `stale_ms` old. It
   always fills `age_ms` (−1 if no frame was ever received) and sets `in_range`.
 
-**`level_report`** (sink abstraction)
-- `level_report_init()`, `level_report_publish(const level_reading_t *)`,
-  `level_status_str()`.
-- The Stage 1 sink prints one `key=value` line through `ESP_LOGI` (tag `wt`). See §8.
+**`level_report`** (sink dispatcher, run #3)
+- `level_report_init()` registers the console sink. Calling it twice returns
+  `ESP_ERR_INVALID_STATE`.
+- `level_report_add_sink(level_sink_fn, ctx)` registers up to `LEVEL_REPORT_MAX_SINKS` (4)
+  sinks. It returns `ESP_ERR_INVALID_ARG` for a NULL function and `ESP_ERR_NO_MEM` when
+  full. It is not thread-safe and must be called during start-up, before the reporter task
+  publishes.
+- `level_report_publish(const level_reading_t *)` calls every sink in registration order
+  from the reporter task. Sinks must not block; a network sink queues the reading.
+- Console sink (`level_report_uart.c`): one `key=value` line through `ESP_LOGI` (tag
+  `wt`), byte-identical to the run #2 output. See §8.
 
 **`main.c`**
 - `app_main`: NVS init (erases and retries on a version or no-free-pages error; prepared
@@ -239,9 +254,10 @@ Recommended approach: **MQTT with Home Assistant MQTT Discovery** (`esp-mqtt` + 
   an availability topic with LWT `offline` and birth `online`.
 - Publish state JSON (`distance_mm`, `status`, `age_ms`) to `watertank/<device_id>/state`
   at a configurable interval (default suggestion: 10 s; the UART stream stays at 1 Hz).
-- Sink fan-out: `level_report_publish()` becomes a dispatcher to the console sink and the
-  MQTT sink. The MQTT sink must never block the reporter task: it copies the reading into
-  a queue of depth 1 (overwrite) that a separate MQTT task consumes.
+- Sink fan-out: `level_report_publish()` is already a dispatcher (run #3). The MQTT sink
+  registers with `level_report_add_sink()` from `app_main` before the reporter task starts.
+  It must never block the reporter task: it copies the reading into a queue of depth 1
+  (`xQueueOverwrite`) that a separate MQTT task consumes.
 - Later: tank geometry (`empty_mm`, `full_mm`) → `level_percent`, optional `volume_l`.
 
 Alternatives:
@@ -265,7 +281,7 @@ Alternatives:
 | G9 | Whether the sensor RX wire is connected | Works either way | None | — |
 | G10 | Board's USB bridge reset behaviour (auto-reset circuit present?) | Present (typical CH340 DevKit clone) | Manual BOOT/EN needed to flash | V-02 observation |
 | G11 | `CONFIG_LOG_COLORS` default depends on IDF version/config | Disabled in `sdkconfig.defaults` (F-04, done) | Only if an existing `sdkconfig` predates the change. `check_log.py` strips ANSI codes anyway | Delete `sdkconfig` or run `idf.py fullclean` to re-apply defaults |
-| G12 | Who commits the worktree. Agent phases have file tools only, with no git | The platform or the operator commits between phases | V-01 stays blocked ("worktree is dirty") | Commit all files under `source/`, then re-trigger the CI build |
+| G12 | Who commits the worktree. Agent phases have file tools only, with no git | The platform commits at phase end (observed: `65c6ad9`, clean status at the start of run #3 impl.) | V-01 stays blocked ("worktree is dirty") | If a build is blocked again, commit all files under `source/`, then re-trigger the CI build |
 | G13 | CI workflow contents (IDF image/version, artifacts kept) cannot be seen from `source/` | It runs `idf.py set-target esp32 build` with IDF v5.x and keeps `build/` artifacts | A v6.x or v4.x image could break the build (§7.3). Without artifacts, flashing needs a local build | First CI log: record the IDF version and the artifact list in VERIFICATION_MATRIX.md |
 
 ## 7. Implementation status and static review
@@ -293,14 +309,14 @@ implementation phase.
 | F-05 | Kconfig `WT_SENSOR_RX_GPIO` range 0–39 allows flash pins 6–11 and non-existent GPIOs (20, 24, 28–31). Invalid pins fail in `uart_set_pin` and abort; flash pins would hang the chip | Low | **Done**: validated in `a02yyuw_init` (§3.3), Kconfig help updated |
 | F-06 | `prev_status` starts as `OK`, so a board booting without a sensor logs the "data lost" warning at the first tick (~1 s) | Info (intended) | None. Required by V-03b |
 | F-07 | `uart_set_pin` already enables the RX pull-up in IDF v5; the extra `gpio_pullup_en` is redundant | Info | Keep (harmless) |
-| F-08 | `level_report` takes a single sink; Stage 2 needs a fan-out | Info | Planned in §5 / M6 |
+| F-08 | `level_report` takes a single sink; Stage 2 needs a fan-out | Info | **Done (run #3 impl.)**: sink registry + `level_report_add_sink` (§3.3). Not build-verified |
 | F-09 | Misaligned windows pass the 8-bit checksum with probability ~1/256, only while resyncing | Low | The median filter mitigates it; check `cks_err` in V-10 |
 | F-10 | `GPIO_IS_VALID_GPIO` / `GPIO_IS_VALID_OUTPUT_GPIO` are expected from `driver/gpio.h` (already included) in IDF v5.x. Not build-verified | Low | V-01. If missing, test `SOC_GPIO_VALID_GPIO_MASK` / `SOC_GPIO_VALID_OUTPUT_GPIO_MASK` from `soc/soc_caps.h` directly |
 | F-11 | Hand traces of every case in `test_parser.c` and `test_check_log.py` found no wrong expectations, but neither file has been executed. Re-traced in the run #2 review with the same result | Info | V-09 and the checker self-test (V-09b) |
 | F-12 | `a02yyuw` required the monolithic `driver` component, which IDF v5.3 split into `esp_driver_*`. Newer releases may remove the alias, and the bench IDF version is unknown (G4) | Medium (build portability) | **Done (run #2 review)**: requirement chosen from `IDF_VERSION_MAJOR/MINOR`. Not build-verified on either branch (V-01) |
 | F-13 | GPIO17 is a push-pull UART TX idling HIGH. If the wiring is swapped (G1), it drives against the sensor TX output. The previous docs presented the swap as harmless to diagnose | Medium (hardware safety) | **Documented (run #2 review)**: README caution + Kconfig help. Diagnose with `WT_SENSOR_TX_GPIO=-1`; optional ~1 kΩ series resistor. Default left at 17 to match PURPOSE. The operator may choose -1 as the default (functionally equivalent per §2.2, but check_log `--tx-gpio` must then be passed) |
 | F-14 | Review re-checked IDF `-Wall` exposure (format specifiers, `ESP_GOTO_ON_ERROR` needs a local `ret`, unused symbols) in all project sources and found no issue by reading | Info | V-01 (IDF builds with `-Werror=all`) |
-| F-15 | GitHub Actions Build #1 was **blocked before compiling**: "Project Git worktree is dirty; commit changes before building". Every project file is untracked (`?? CMakeLists.txt`, `components/`, `main/`, …). The commits so far (`b1c6a18`, `37f0f80`, `c4a0c6d`) do not contain the firmware. This is a process blocker, not a code defect | High (blocks V-01) | Commit all of `source/` (G12) and re-run the build. Commit `.gitignore` too, so `build/` and `sdkconfig` never make the tree dirty |
+| F-15 | GitHub Actions Build #1 was **blocked before compiling**: "Project Git worktree is dirty; commit changes before building". Every project file is untracked (`?? CMakeLists.txt`, `components/`, `main/`, …). The commits so far (`b1c6a18`, `37f0f80`, `c4a0c6d`) do not contain the firmware. This is a process blocker, not a code defect | High (blocks V-01) | Commit all of `source/` (G12) and re-run the build. Commit `.gitignore` too, so `build/` and `sdkconfig` never make the tree dirty. **Run #3 impl.:** the tree was committed (`65c6ad9`) and the worktree was clean at phase start. Probably resolved for the next build; confirm with a real builder result |
 | F-16 | `.gitignore` ignores `*.log`, so bench captures named `*.log` (README examples) will not be committed as evidence | Low (evidence handling) | Store evidence captures as `test/bench/evidence/<check>-<date>.txt`, or `git add -f`. No code change needed |
 
 ### 7.3 ESP-IDF APIs used (build-compatibility surface)

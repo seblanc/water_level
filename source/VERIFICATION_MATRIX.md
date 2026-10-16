@@ -9,7 +9,12 @@ there is no real evidence for any of them. Firmware source and host tests exist.
 has been compiled, flashed, run, or measured. The only analysis done is static review by
 reading the code (SYSTEM_ARCHITECTURE.md §7.2).
 
-Last updated: run #3, ARCHITECTURE phase (attempt 1), 2026-10-16. The first builder result
+Run #3, IMPLEMENTATION phase (attempt 2), 2026-10-16: the tree is now committed (`65c6ad9`)
+and the worktree was clean at phase start, so the next CI build should compile. No new
+builder result exists. The `level_report` sink dispatcher was added (F-08). The R-05 output
+format is unchanged, and none of the check procedures change.
+
+Run #3, ARCHITECTURE phase (attempt 1), 2026-10-16: the first builder result
 is in the results log: GitHub Actions Build #1 was **blocked** by the dirty worktree, so no
 compilation happened (F-15). Earlier, the run #2 review re-read all sources,
 host tests, and the log checker. It fixed F-12 (driver component selection by IDF version)
@@ -49,10 +54,10 @@ automates the log-based pass criteria marked "auto" below.
 | R-02 | No firmware work needed; procedure in `README.md` and SYSTEM_ARCHITECTURE.md §4 |
 | R-03 | `components/a02yyuw/a02yyuw.c` (`a02yyuw_init` with port/GPIO validation, `rx_task`), `main/Kconfig.projbuild` pins |
 | R-04 | Wiring only (README.md wiring table) |
-| R-05 | `main/main.c` `reporter_task` (`xTaskDelayUntil`), `components/level_report/level_report_uart.c` |
+| R-05 | `main/main.c` `reporter_task` (`xTaskDelayUntil`), `components/level_report/level_report.c` (sink dispatcher), `components/level_report/level_report_uart.c` (console sink) |
 | R-06 | `components/a02yyuw/a02yyuw_parser.c` (checksum + resync); `test/host/test_parser.c`; `rx_bytes`/`line_err` diagnostics in `level_report_uart.c` |
 | R-07 | `a02yyuw_get_latest` staleness; `status=NO_DATA` + transition logging in `main/main.c`; filter reset after a gap in `a02yyuw.c` `on_frame` |
-| R-08 | — (Stage 2) |
+| R-08 | Groundwork only: `level_report_add_sink` (Stage 2 sink attaches here). No HA code yet |
 
 ## Verification checks
 
@@ -99,7 +104,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED | CI Build #1 blocked: worktree not committed (V-01, F-15). No host compiler for V-09/V-09b |
+| AC-1 | NOT VERIFIED | CI Build #1 was blocked (worktree not committed, F-15). The tree is now committed, but no new build result exists (V-01). No host compiler for V-09/V-09b |
 | AC-2 | NOT VERIFIED | No hardware access (V-02) |
 | AC-3 | NOT VERIFIED | Needs board + sensor + log capture (V-03, V-05); pin direction G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Needs tape measure and target (V-06); tolerance is an assumption |

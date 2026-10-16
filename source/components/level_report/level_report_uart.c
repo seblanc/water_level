@@ -1,37 +1,13 @@
-#include "level_report.h"
-
 #include <inttypes.h>
-#include <stddef.h>
 
 #include "esp_log.h"
+#include "level_report_priv.h"
 
 static const char *TAG = "wt";
 
-const char *level_status_str(level_status_t status)
+void level_report_console_sink(const level_reading_t *r, void *ctx)
 {
-    switch (status) {
-    case LEVEL_STATUS_OK:
-        return "OK";
-    case LEVEL_STATUS_NO_DATA:
-        return "NO_DATA";
-    case LEVEL_STATUS_OUT_OF_RANGE:
-        return "OUT_OF_RANGE";
-    default:
-        return "UNKNOWN";
-    }
-}
-
-esp_err_t level_report_init(void)
-{
-    /* The console UART is set up by ESP-IDF; nothing to do for Stage 1. */
-    return ESP_OK;
-}
-
-void level_report_publish(const level_reading_t *r)
-{
-    if (r == NULL) {
-        return;
-    }
+    (void)ctx;
 
     /*
      * key=value format so a host script can parse the log during verification
