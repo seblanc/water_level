@@ -6,5 +6,5 @@
   "id": "1a95ca931d72",
   "name": "Water tank",
   "summary": "Water tank level",
-  "target": "ESP32 dev board from aliespress"
+  "target": "ESP32"
 }
