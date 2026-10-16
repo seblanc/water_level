@@ -9,6 +9,12 @@ there is no real evidence for any of them. Firmware source and host tests exist.
 has been compiled, flashed, run, or measured. The only analysis done is static review by
 reading the code (SYSTEM_ARCHITECTURE.md §7.2).
 
+Run #3, IMPLEMENTATION phase (attempt 3), 2026-10-16: GitHub Actions Build #2 was
+**blocked** when the platform's `git push` to `seblanc/water_level` returned HTTP 403
+(permission denied). That is a CI credential/repository-access problem (F-17, G14), not a
+source problem. Nothing was compiled. The sources were re-read statically and no change was
+needed, so source files are unchanged in this phase.
+
 Run #3, IMPLEMENTATION phase (attempt 2), 2026-10-16: the tree is now committed (`65c6ad9`)
 and the worktree was clean at phase start, so the next CI build should compile. No new
 builder result exists. The `level_report` sink dispatcher was added (F-08). The R-05 output
@@ -65,7 +71,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | Check | Req | Method | Procedure | Pass criterion | Needs | Result |
 |-------|-----|--------|-----------|----------------|-------|--------|
-| V-01 | R-01 | Build (GitHub Actions) | Commit `source/`, then the CI build runs (equivalent to `idf.py set-target esp32 && idf.py build`) | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version (and so which F-12 branch, `driver` or `esp_driver_*`, was exercised) and the artifact list | Clean committed worktree + CI with IDF v5.x | NOT VERIFIED (Build #1 blocked, see the results log) |
+| V-01 | R-01 | Build (GitHub Actions) | Commit `source/`, then the CI build runs (equivalent to `idf.py set-target esp32 && idf.py build`) | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version (and so which F-12 branch, `driver` or `esp_driver_*`, was exercised) and the artifact list | Clean committed worktree + CI with IDF v5.x | NOT VERIFIED (Builds #1 and #2 blocked, see the results log) |
 | V-02 | R-02 | Bench | `idf.py -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 flash`, or from the CI `build/` artifacts: `python -m esptool --chip esp32 -p <port> write_flash @flash_args` | esptool prints "Hash of data verified" for each segment and the board resets into the app | Board + USB | NOT VERIFIED |
 | V-03 | R-03 | Bench / log (auto: `check_log.py --check v03`) | Sensor connected; `idf.py -p <port> monitor`, capture to a file | Banner shows `rx_gpio=16 tx_gpio=17 baud=9600`; within 2 s, `status=OK` lines appear with `ok=` increasing. On failure, record `rx_bytes`/`line_err` (README troubleshooting table) | Board + sensor | NOT VERIFIED |
 | V-03b | R-07 | Bench / log (auto: `--check v03b`) | Boot with the sensor **disconnected** | Banner printed; one `sensor data lost` warning; `status=NO_DATA distance_mm=-1 age_ms=-1 ok=0` lines at 1 Hz; no reboot | Board | NOT VERIFIED |
@@ -104,7 +110,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED | CI Build #1 was blocked (worktree not committed, F-15). The tree is now committed, but no new build result exists (V-01). No host compiler for V-09/V-09b |
+| AC-1 | NOT VERIFIED | CI Build #1 was blocked (worktree not committed, F-15). Build #2 was blocked (git push 403, F-17): the CI credentials need write access to `seblanc/water_level`. No compilation yet (V-01). No host compiler for V-09/V-09b |
 | AC-2 | NOT VERIFIED | No hardware access (V-02) |
 | AC-3 | NOT VERIFIED | Needs board + sensor + log capture (V-03, V-05); pin direction G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Needs tape measure and target (V-06); tolerance is an assumption |
@@ -118,5 +124,6 @@ All six criteria are also still **proposals** (G6) until the operator confirms t
 | Date | Check | Source | Outcome | Evidence |
 |------|-------|--------|---------|----------|
 | 2026-10-16 | V-01 | GitHub Actions Build #1 (commit "pending") | **BLOCKED**, not executed. The source was not compiled, so this is neither a pass nor a fail | Builder message: "Project Git worktree is dirty; commit changes before building" |
+| 2026-10-16 | V-01 | GitHub Actions Build #2 (commit "pending") | **BLOCKED**, not executed. Push to the CI repository was refused, so the source was not compiled. Neither a pass nor a fail | Builder message: "remote: Permission to seblanc/water_level.git denied to seblanc. ... The requested URL returned error: 403" |
 
 No other check has been executed.

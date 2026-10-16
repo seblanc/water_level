@@ -51,12 +51,19 @@ Last updated: run #3, IMPLEMENTATION phase (attempt 2), 2026-10-16.
 - [x] Static re-read of all firmware sources, CMake files and host tests: no defects found
 - [x] F-08: `level_report` sink dispatcher (`level_report.c`, `level_report_add_sink`, `LEVEL_REPORT_MAX_SINKS`). The console sink moved behind it with identical output
 
+### M4e — Run #3 implementation (attempt 3; static only, not compiled)
+- [x] Recorded Build #2: **blocked** by a `git push` 403 to `seblanc/water_level` (F-17). Platform/operator issue, no compilation happened
+- [x] Static re-read of all firmware sources, headers, CMake/Kconfig and sdkconfig.defaults: no defects found, no source changes
+- [ ] Operator: give the CI credentials (PAT/deploy key/GitHub App) **write** access to `seblanc/water_level`, or point the backend at a repository it can push to (G14). Then re-trigger the build
+
 ### M5 — Build and bench verification (needs a toolchain and hardware; operator or a bench-enabled phase)
 Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRIX.md:
 
 **Precondition:** commit the whole `source/` tree (platform/operator; agents have no git).
 Build #1 was blocked by the dirty worktree (F-15, G12). The platform has since committed
-the tree (`65c6ad9`), and it is expected to commit this phase's changes as well.
+the tree (`65c6ad9`, `3e2dc04`), and it is expected to commit this phase's changes as well.
+Build #2 then failed at `git push` with HTTP 403 (F-17, G14). The CI push credentials must
+have write access to the repository before V-01 can run.
 
 0. [ ] V-04 wiring inspection **before power-up** (sensor TX → GPIO16; F-13)
 1. [ ] V-09 `make -C test/host run`, and V-09b `python3 test/bench/test_check_log.py`
