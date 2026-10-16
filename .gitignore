@@ -1,0 +1,25 @@
+# Project-specific runtime and reference material (do not commit)
+documents/
+.nostromo-git.lock
+.nostromo/
+*.db
+*.db-wal
+*.db-shm
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+build/
+dist/
+*.elf
+*.bin
+*.uf2
+*.hex
+*.map
+sdkconfig.old
