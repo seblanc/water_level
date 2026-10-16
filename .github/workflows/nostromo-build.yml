@@ -1,0 +1,106 @@
+name: NOSTROMO Firmware Build
+run-name: NOSTROMO build ${{ inputs.nostromo_build_id }} · ${{ inputs.adapter }} · ${{ inputs.target }}
+on:
+  workflow_dispatch:
+    inputs:
+      nostromo_build_id:
+        description: NOSTROMO build correlation ID
+        required: true
+        type: string
+      adapter:
+        description: Firmware build toolchain
+        required: true
+        type: choice
+        options:
+          - esp_idf
+          - platformio
+      target:
+        description: ESP-IDF chip or PlatformIO environment
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: nostromo-build-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  esp-idf:
+    if: inputs.adapter == 'esp_idf'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    container:
+      image: espressif/idf:v5.4.2
+    steps:
+      - name: Checkout committed firmware
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build native ESP-IDF firmware
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          test -f source/CMakeLists.txt || { echo 'Missing source/CMakeLists.txt'; exit 2; }
+          . /opt/esp/idf/export.sh >/dev/null
+          idf.py -C source set-target "$TARGET" build
+      - name: Package binaries and build evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cp -a source/build artifacts/build
+          git rev-parse HEAD > artifacts/source-commit.txt
+          . /opt/esp/idf/export.sh >/dev/null
+          idf.py --version > artifacts/toolchain-version.txt
+          (cd artifacts && find . -type f -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS)
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: nostromo-firmware-${{ inputs.nostromo_build_id }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
+  platformio:
+    if: inputs.adapter == 'platformio'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout committed firmware
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned PlatformIO CLI
+        run: python -m pip install 'platformio==6.1.18'
+      - name: Compile selected PlatformIO environment
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          test -f source/platformio.ini || { echo 'Missing source/platformio.ini'; exit 2; }
+          python -m platformio run --project-dir source -e "$TARGET"
+      - name: Package build output and evidence
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          test -d "source/.pio/build/$TARGET"
+          mkdir -p artifacts/build
+          find "source/.pio/build/$TARGET" -maxdepth 1 -type f \( -name '*.elf' -o -name '*.bin' -o -name '*.hex' -o -name '*.uf2' \) -exec cp {} artifacts/build/ \;
+          test -n "$(find artifacts/build -type f -print -quit)" || { echo 'No expected firmware output'; exit 2; }
+          git rev-parse HEAD > artifacts/source-commit.txt
+          python -m platformio --version > artifacts/toolchain-version.txt
+          (cd artifacts && find . -type f -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS)
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: nostromo-firmware-${{ inputs.nostromo_build_id }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
