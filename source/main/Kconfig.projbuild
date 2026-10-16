@@ -1,0 +1,63 @@
+menu "Water Tank Sensor"
+
+    config WT_SENSOR_UART_NUM
+        int "UART port used for the A02YYUW sensor"
+        range 1 2
+        default 2
+        help
+            Hardware UART connected to the sensor. UART0 is the console/flashing port
+            and must not be used here.
+
+    config WT_SENSOR_RX_GPIO
+        int "ESP32 RX GPIO (wired to sensor TX, white wire)"
+        range 0 39
+        default 16
+        help
+            GPIO receiving the sensor's 9600 baud data frames. Swap with the TX GPIO
+            if no data is received and the wiring is reversed (gap G1).
+            Note: on ESP32-WROVER modules GPIO16/17 are used by the PSRAM (gap G2).
+            GPIO6-11 (SPI flash) and the non-existent GPIO20, 24 and 28-31 are
+            rejected at boot: a02yyuw_init logs an error and the firmware aborts.
+
+    config WT_SENSOR_TX_GPIO
+        int "ESP32 TX GPIO (wired to sensor RX, yellow wire); -1 = unused"
+        range -1 33
+        default 17
+        help
+            The firmware never transmits to the sensor. The idle-HIGH UART TX line
+            keeps the sensor in its "processed value" output mode, which is the
+            same as leaving the sensor RX wire unconnected. Set to -1 to leave the
+            pin unconfigured. Must differ from the RX GPIO. GPIO6-11 (SPI flash) and
+            the non-existent GPIO20, 24 and 28-31 are rejected at boot.
+            Use -1 while the pin direction is unconfirmed: if the sensor TX wire
+            is on this pin, the driven-HIGH TX line would fight the sensor output.
+
+    config WT_REPORT_PERIOD_MS
+        int "Distance report period (ms)"
+        range 100 60000
+        default 1000
+        help
+            Interval between distance lines printed on the console.
+
+    config WT_SENSOR_STALE_MS
+        int "Sensor data stale timeout (ms)"
+        range 200 10000
+        default 1000
+        help
+            If no checksum-valid frame was received for longer than this, the
+            report shows status=NO_DATA.
+
+    config WT_MEDIAN_FILTER
+        bool "Enable median filter on sensor readings"
+        default n
+        help
+            Report the median of the last N valid frames instead of the newest
+            raw frame. Useful against splash/condensation outliers.
+
+    config WT_MEDIAN_WINDOW
+        int "Median filter window (frames)"
+        depends on WT_MEDIAN_FILTER
+        range 3 15
+        default 5
+
+endmenu

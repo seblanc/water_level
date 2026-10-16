@@ -1,0 +1,22 @@
+# Defaults for the water tank firmware (ESP32-WROOM-32 class dev board, CH340 bridge).
+# Applied when no sdkconfig exists yet; run `idf.py fullclean` or delete sdkconfig to re-apply.
+CONFIG_IDF_TARGET="esp32"
+
+# Flash: 4 MB assumed (gap G2/G4 in SYSTEM_ARCHITECTURE.md)
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# Console on UART0 (GPIO1/GPIO3 -> CH340) at 115200 baud, matching the bench "UART @115200"
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# Logging. No ANSI colour codes, so report lines stay machine-parseable (§8).
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+# CONFIG_LOG_COLORS is not set
+
+# Project defaults (see main/Kconfig.projbuild)
+CONFIG_WT_SENSOR_UART_NUM=2
+CONFIG_WT_SENSOR_RX_GPIO=16
+CONFIG_WT_SENSOR_TX_GPIO=17
+CONFIG_WT_REPORT_PERIOD_MS=1000
+CONFIG_WT_SENSOR_STALE_MS=1000
+# CONFIG_WT_MEDIAN_FILTER is not set
