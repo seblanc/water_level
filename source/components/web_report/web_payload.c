@@ -153,20 +153,70 @@ static int64_t json_int(const char *body, const char *name)
     return (i < 0) ? -1 : (int64_t)i;
 }
 
+static bool json_true(const char *body, const char *name)
+{
+    const char *v = json_value(body, name);
+    return v != NULL && strncmp(v, "true", 4) == 0;
+}
+
+/* Copies a string value, keeping only characters that are safe in a log line
+ * (no '=' so it can never look like a bench-checker key=value token). */
+static void json_safe_str(const char *body, const char *name, char *dst, size_t size)
+{
+    dst[0] = '\0';
+    const char *v = json_value(body, name);
+    if (v == NULL || *v != '"') {
+        return;
+    }
+    size_t n = 0;
+    for (v++; *v != '\0' && *v != '"' && n + 1 < size; v++) {
+        char c = *v;
+        bool safe = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                    c == ' ' || c == '.' || c == '_' || c == '-';
+        if (safe) {
+            dst[n++] = c;
+        }
+    }
+    dst[n] = '\0';
+}
+
 int web_payload_parse_reply(const char *body, web_reply_t *out)
 {
     if (out == NULL) {
         return -1;
     }
     out->ok = false;
+    out->stored = false;
     out->id = -1;
     out->rows = -1;
+    out->distance_mm = -1;
+    out->uptime_s = -1;
+    out->error[0] = '\0';
     if (body == NULL) {
         return -1;
     }
-    const char *ok = json_value(body, "ok");
-    out->ok = (ok != NULL && strncmp(ok, "true", 4) == 0);
+    out->ok = json_true(body, "ok");
+    out->stored = json_true(body, "stored");
     out->id = json_int(body, "id");
     out->rows = json_int(body, "rows");
+    out->distance_mm = json_int(body, "distance_mm");
+    out->uptime_s = json_int(body, "uptime_s");
+    json_safe_str(body, "error", out->error, sizeof(out->error));
     return out->ok ? 0 : -1;
+}
+
+web_store_t web_payload_check_stored(const web_reply_t *reply, const web_post_t *sent)
+{
+    if (reply == NULL || sent == NULL || !reply->ok) {
+        return WEB_STORE_FAILED;
+    }
+    if (!reply->stored || reply->id < 0) {
+        return WEB_STORE_UNCONFIRMED;
+    }
+    /* NO_DATA is sent with an empty distance and stored as NULL: both are -1 here. */
+    int64_t sent_dist = sent->distance_mm >= 0 ? sent->distance_mm : -1;
+    if (reply->distance_mm != sent_dist || reply->uptime_s != (int64_t)sent->uptime_s) {
+        return WEB_STORE_MISMATCH;
+    }
+    return WEB_STORE_CONFIRMED;
 }

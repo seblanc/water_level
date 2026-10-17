@@ -4,10 +4,18 @@
  * components/web_report/web_payload.c builds them; keep both sides in sync):
  *   key, device, distance_mm (empty when NO_DATA), status, age_ms, frames_ok,
  *   checksum_err, rssi, uptime_s, fw
- * Replies 200 {"ok":true,"id":<row id>,"rows":<rows in table>,"level_pct":..}
- * (the firmware parses ok/id/rows), 400 bad field, 401 bad key, 405 not POST,
- * 500 database error.
+ * Replies 200 {"ok":true,"stored":true,"id":<row id>,"rows":<rows in table>,
+ *   "distance_mm":<stored value or null>,"uptime_s":<stored value>,"level_pct":..}
+ * only after the new row was read back from the database and matched the request.
+ * The firmware parses ok/stored/id/rows/distance_mm/uptime_s and compares the echoed
+ * values with what it sent. Errors: 400 bad field, 401 bad key, 405 not POST,
+ * 500 database or readback error; all as {"ok":false,"error":"..."}.
  */
+
+/* Notices or warnings printed before the JSON would break the firmware's reply
+ * check; they go to the server error log only. */
+ini_set('display_errors', '0');
+
 require __DIR__ . '/db.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
@@ -78,8 +86,22 @@ try {
         time(), $device, $row['distance_mm'], $status, $row['age_ms'], $row['frames_ok'],
         $row['checksum_err'], $row['rssi'], $row['uptime_s'], $fw,
     ]);
-    /* Echoed to the ESP32, which logs them as proof the row was stored. */
     $id = (int)$pdo->lastInsertId();
+
+    /* Read the row back: success is only reported for data that is really in the
+     * table. The stored values are echoed so the ESP32 can compare them too. */
+    $read = $pdo->prepare("SELECT device, distance_mm, status, uptime_s FROM $t WHERE id = ?");
+    $read->execute([$id]);
+    $stored = $read->fetch();
+    $read->closeCursor();
+    $stored_dist = ($stored && $stored['distance_mm'] !== null) ? (int)$stored['distance_mm'] : null;
+    $stored_up = ($stored && $stored['uptime_s'] !== null) ? (int)$stored['uptime_s'] : null;
+    if ($id <= 0 || !$stored || (string)$stored['device'] !== $device
+        || (string)$stored['status'] !== $status || $stored_dist !== $row['distance_mm']
+        || $stored_up !== $row['uptime_s']) {
+        error_log("water/post.php: readback of row $id does not match the request");
+        wt_json(['ok' => false, 'error' => 'readback'], 500);
+    }
     $rows = (int)$pdo->query("SELECT COUNT(*) FROM $t")->fetchColumn();
 
     /* Occasional pruning, about once per 500 posts. */
@@ -93,4 +115,12 @@ try {
     wt_json(['ok' => false, 'error' => 'database'], 500);
 }
 
-wt_json(['ok' => true, 'id' => $id, 'rows' => $rows, 'level_pct' => wt_level_percent($row['distance_mm'])]);
+wt_json([
+    'ok' => true,
+    'stored' => true,
+    'id' => $id,
+    'rows' => $rows,
+    'distance_mm' => $stored_dist,
+    'uptime_s' => $stored_up,
+    'level_pct' => wt_level_percent($row['distance_mm']),
+]);

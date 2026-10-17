@@ -42,9 +42,9 @@ static bool s_started;
 /* wt_web task only. */
 static char s_form[WEB_PAYLOAD_FORM_MAX];
 
-/* Start of the server reply body (post.php replies with ~60 bytes of JSON). */
+/* Start of the server reply body (post.php replies with ~130 bytes of JSON). */
 typedef struct {
-    char buf[192];
+    char buf[320];
     int len;
 } web_body_t;
 static web_body_t s_body;
@@ -109,13 +109,8 @@ static esp_err_t http_event(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
-/*
- * One blocking POST. Returns the HTTP status, or -1 with *err set on a
- * transport error. The reply body is left in s_body.
- */
-static int post_reading(const level_reading_t *r, esp_err_t *err)
+static web_post_t make_post(const level_reading_t *r)
 {
-    *err = ESP_FAIL;
     const web_post_t p = {
         .key = s_key,
         .device = s_device,
@@ -128,7 +123,17 @@ static int post_reading(const level_reading_t *r, esp_err_t *err)
         .uptime_s = (uint32_t)(esp_timer_get_time() / 1000000),
         .fw = esp_app_get_description()->version,
     };
-    int len = web_payload_form(s_form, sizeof(s_form), &p);
+    return p;
+}
+
+/*
+ * One blocking POST. Returns the HTTP status, or -1 with *err set on a
+ * transport error. The reply body is left in s_body.
+ */
+static int post_reading(const web_post_t *p, esp_err_t *err)
+{
+    *err = ESP_FAIL;
+    int len = web_payload_form(s_form, sizeof(s_form), p);
     if (len < 0) {
         ESP_LOGE(TAG, "form body too large");
         return -1;
@@ -172,6 +177,7 @@ static void post_task(void *arg)
     bool posted = false;          /* at least one successful post since boot */
     bool posted_has_data = false; /* has_data of the last successful post */
     bool logged_fail = false;     /* the current outage already has its W line */
+    uint32_t failed_tries = 0;    /* failed posts since the last delivered one */
     bool stack_logged = false;
     level_reading_t r;
 
@@ -195,37 +201,64 @@ static void post_task(void *arg)
         }
 
         last_try_us = now;
+        const web_post_t p = make_post(&r);
         esp_err_t err;
-        int status = post_reading(&r, &err);
+        int status = post_reading(&p, &err);
         /* A 200 only counts when post.php itself answered {"ok":true}: a hosting
-         * error page or an unexecuted PHP file can also come back as 200. */
-        web_reply_t reply = {0};
-        bool ok = (status == 200) && web_payload_parse_reply(s_body.buf, &reply) == 0;
+         * error page or an unexecuted PHP file can also come back as 200. Since
+         * run #20 post.php also reads the row back and echoes the stored values,
+         * which must match what was sent. */
+        web_reply_t reply;
+        web_payload_parse_reply(s_body.buf, &reply);
+        web_store_t store = (status == 200) ? web_payload_check_stored(&reply, &p)
+                                            : WEB_STORE_FAILED;
+        bool ok = (store == WEB_STORE_CONFIRMED || store == WEB_STORE_UNCONFIRMED);
         if (ok) {
-            /* One I line per stored reading (at most one per period): the
-             * server-side row id is the proof that the database got it.
-             * No key=value tokens here, the bench checker samples those. */
-            if (reply.id >= 0 && reply.rows >= 0) {
-                ESP_LOGI(TAG, "post ok: http 200, stored as row %" PRId64 ", %" PRId64
-                         " rows in table", reply.id, reply.rows);
+            /* One I line per stored reading (at most one per period). No
+             * key=value tokens here, the bench checker samples those. */
+            char after[40] = "";
+            if (failed_tries > 0) {
+                snprintf(after, sizeof(after), ", after %" PRIu32 " failed tries", failed_tries);
+            }
+            if (store == WEB_STORE_CONFIRMED) {
+                char dist[24];
+                if (p.distance_mm >= 0) {
+                    snprintf(dist, sizeof(dist), "%" PRId32 " mm", p.distance_mm);
+                } else {
+                    strlcpy(dist, "no distance", sizeof(dist));
+                }
+                ESP_LOGI(TAG, "post ok: http 200, row %" PRId64 " stored and read back (%s), %"
+                         PRId64 " rows in table%s", reply.id, dist, reply.rows, after);
+            } else if (reply.id >= 0) {
+                ESP_LOGI(TAG, "post ok: http 200, stored as row %" PRId64 " (not read back, "
+                         "old post.php)%s", reply.id, after);
             } else {
-                ESP_LOGI(TAG, "post ok: http 200, stored (server sent no row id)");
+                ESP_LOGI(TAG, "post ok: http 200, stored (no row id, old post.php)%s", after);
             }
             posted = true;
             posted_has_data = has_data;
             logged_fail = false;
-        } else if (!logged_fail) {
-            /* One W line per outage start, not one per retry (V-16e). */
-            if (status == 200) {
-                ESP_LOGW(TAG, "post rejected: http 200 but the reply is not from post.php");
-            } else if (status > 0) {
-                /* 3xx = URL redirects, 401 = wrong API key, 404 = wrong URL,
-                 * 5xx = server/database. */
-                ESP_LOGW(TAG, "post rejected: http %d", status);
-            } else {
-                ESP_LOGW(TAG, "post failed: %s", esp_err_to_name(err));
+            failed_tries = 0;
+        } else {
+            failed_tries++;
+            if (!logged_fail) {
+                /* One W line per outage start, not one per retry (V-16e). */
+                if (store == WEB_STORE_MISMATCH) {
+                    ESP_LOGW(TAG, "post rejected: row %" PRId64 " read back with other values "
+                             "(%" PRId64 " mm, uptime %" PRId64 " s)", reply.id,
+                             reply.distance_mm, reply.uptime_s);
+                } else if (status == 200) {
+                    ESP_LOGW(TAG, "post rejected: http 200 but the reply is not from post.php");
+                } else if (status > 0) {
+                    /* 3xx = URL redirects, 401 = wrong API key, 404 = wrong URL,
+                     * 5xx = server/database; post.php names the cause in "error". */
+                    ESP_LOGW(TAG, "post rejected: http %d (%s)", status,
+                             reply.error[0] != '\0' ? reply.error : "no server message");
+                } else {
+                    ESP_LOGW(TAG, "post failed: %s", esp_err_to_name(err));
+                }
+                logged_fail = true;
             }
-            logged_fail = true;
         }
         last_ok = ok;
 

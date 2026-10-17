@@ -52,11 +52,22 @@ int web_payload_device_id(char *dst, size_t size, const uint8_t mac[6]);
  */
 int web_payload_form(char *dst, size_t size, const web_post_t *p);
 
-/* Fields of the post.php 200 reply {"ok":true,"id":N,"rows":N,...}. */
+#define WEB_REPLY_ERROR_LEN 32
+
+/*
+ * Fields of the post.php reply:
+ *   200 {"ok":true,"stored":true,"id":N,"rows":N,"distance_mm":N|null,"uptime_s":N,..}
+ *   4xx/5xx {"ok":false,"error":"..."}
+ */
 typedef struct {
-    bool ok;        /* "ok":true present */
-    int64_t id;     /* database row id of this reading, -1 if absent */
-    int64_t rows;   /* rows in the table after the insert, -1 if absent */
+    bool ok;              /* "ok":true present */
+    bool stored;          /* "stored":true present (server read the row back) */
+    int64_t id;           /* database row id of this reading, -1 if absent */
+    int64_t rows;         /* rows in the table after the insert, -1 if absent */
+    int64_t distance_mm;  /* stored distance, -1 if null or absent */
+    int64_t uptime_s;     /* stored uptime, -1 if absent */
+    /* "error" string, only [A-Za-z0-9 ._-] kept, "" if absent */
+    char error[WEB_REPLY_ERROR_LEN];
 } web_reply_t;
 
 /*
@@ -65,6 +76,16 @@ typedef struct {
  * -1 otherwise (also for NULL arguments). out is always filled when non-NULL.
  */
 int web_payload_parse_reply(const char *body, web_reply_t *out);
+
+typedef enum {
+    WEB_STORE_CONFIRMED,    /* row read back by the server, echo matches what was sent */
+    WEB_STORE_UNCONFIRMED,  /* "ok":true but no readback echo (pre-run-20 post.php) */
+    WEB_STORE_MISMATCH,     /* echo differs from what was sent: not counted as delivered */
+    WEB_STORE_FAILED,       /* no "ok":true (or NULL arguments) */
+} web_store_t;
+
+/* Classify a parsed reply against the post that produced it. */
+web_store_t web_payload_check_stored(const web_reply_t *reply, const web_post_t *sent);
 
 #ifdef __cplusplus
 }
