@@ -127,6 +127,15 @@ function wt_latest(): ?array
     ];
 }
 
+/* Number of stored readings received in the last $hours (shown on the page). */
+function wt_count(int $hours): int
+{
+    $t = wt_table();
+    $stmt = wt_db()->prepare("SELECT COUNT(*) FROM $t WHERE received_at >= ?");
+    $stmt->execute([time() - $hours * 3600]);
+    return (int)$stmt->fetchColumn();
+}
+
 /*
  * Level history for the last $hours, averaged into at most $points buckets.
  * Returns [[unix_time, level_pct], ...] in time order; NO_DATA rows are skipped.

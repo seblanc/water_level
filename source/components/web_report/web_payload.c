@@ -4,6 +4,8 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static bool is_unreserved(char c)
 {
@@ -113,4 +115,58 @@ int web_payload_form(char *dst, size_t size, const web_post_t *p)
         return -1;
     }
     return (int)a.len;
+}
+
+/* ---- server reply ---- */
+
+/* Pointer to the value of "name" (after the colon and blanks), or NULL. */
+static const char *json_value(const char *body, const char *name)
+{
+    size_t n = strlen(name);
+    for (const char *p = strchr(body, '"'); p != NULL; p = strchr(p + 1, '"')) {
+        if (strncmp(p + 1, name, n) != 0 || p[1 + n] != '"') {
+            continue;
+        }
+        const char *v = p + 2 + n;
+        while (*v == ' ' || *v == '\t' || *v == '\r' || *v == '\n') {
+            v++;
+        }
+        if (*v != ':') {
+            continue;  /* the name appeared as a string value, not a key */
+        }
+        v++;
+        while (*v == ' ' || *v == '\t' || *v == '\r' || *v == '\n') {
+            v++;
+        }
+        return v;
+    }
+    return NULL;
+}
+
+static int64_t json_int(const char *body, const char *name)
+{
+    const char *v = json_value(body, name);
+    if (v == NULL || *v < '0' || *v > '9') {
+        return -1;
+    }
+    long long i = strtoll(v, NULL, 10);
+    return (i < 0) ? -1 : (int64_t)i;
+}
+
+int web_payload_parse_reply(const char *body, web_reply_t *out)
+{
+    if (out == NULL) {
+        return -1;
+    }
+    out->ok = false;
+    out->id = -1;
+    out->rows = -1;
+    if (body == NULL) {
+        return -1;
+    }
+    const char *ok = json_value(body, "ok");
+    out->ok = (ok != NULL && strncmp(ok, "true", 4) == 0);
+    out->id = json_int(body, "id");
+    out->rows = json_int(body, "rows");
+    return out->ok ? 0 : -1;
 }

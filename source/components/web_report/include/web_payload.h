@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -50,6 +51,20 @@ int web_payload_device_id(char *dst, size_t size, const uint8_t mac[6]);
  * or -1 on truncation or NULL arguments.
  */
 int web_payload_form(char *dst, size_t size, const web_post_t *p);
+
+/* Fields of the post.php 200 reply {"ok":true,"id":N,"rows":N,...}. */
+typedef struct {
+    bool ok;        /* "ok":true present */
+    int64_t id;     /* database row id of this reading, -1 if absent */
+    int64_t rows;   /* rows in the table after the insert, -1 if absent */
+} web_reply_t;
+
+/*
+ * Minimal scan of the server's JSON reply (flat object written by
+ * json_encode; no nesting is needed). Returns 0 when "ok":true was found,
+ * -1 otherwise (also for NULL arguments). out is always filled when non-NULL.
+ */
+int web_payload_parse_reply(const char *body, web_reply_t *out);
 
 #ifdef __cplusplus
 }

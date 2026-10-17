@@ -3,7 +3,7 @@
  * Read-only JSON for the web page (index.php refreshes from here).
  *   GET api.php?hours=24   (1 .. 2160)
  * Reply: {"ok":true,"latest":{...}|null,"history":[[unix,level_pct],...],
- *         "empty_cm":30,"full_cm":5}
+ *         "hours":24,"count":<readings stored in that period>,"empty_cm":30,"full_cm":5}
  */
 require __DIR__ . '/db.php';
 
@@ -20,6 +20,7 @@ try {
         'latest' => wt_latest(),
         'history' => wt_history($hours),
         'hours' => $hours,
+        'count' => wt_count($hours),
         'empty_cm' => (float)$cfg['empty_cm'],
         'full_cm' => (float)$cfg['full_cm'],
     ]);

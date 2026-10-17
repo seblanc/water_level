@@ -137,6 +137,35 @@ static void test_form_encoding_and_limits(void)
     CHECK(web_payload_form(buf, sizeof(buf), NULL) == -1);
 }
 
+static void test_parse_reply(void)
+{
+    web_reply_t r;
+    CHECK(web_payload_parse_reply("{\"ok\":true,\"id\":1234,\"rows\":5678,\"level_pct\":50.0}", &r) == 0);
+    CHECK(r.ok && r.id == 1234 && r.rows == 5678);
+
+    /* Older server without id/rows: still a success. */
+    CHECK(web_payload_parse_reply("{\"ok\":true,\"level_pct\":null}", &r) == 0);
+    CHECK(r.ok && r.id == -1 && r.rows == -1);
+
+    /* Blanks around the colon (pretty-printed JSON). */
+    CHECK(web_payload_parse_reply("{ \"ok\" : true, \"id\" : 7 }", &r) == 0);
+    CHECK(r.id == 7 && r.rows == -1);
+
+    CHECK(web_payload_parse_reply("{\"ok\":false,\"error\":\"bad key\"}", &r) == -1);
+    CHECK(!r.ok);
+    /* A string value equal to a key name is not a key. */
+    CHECK(web_payload_parse_reply("{\"error\":\"ok\",\"ok\":false}", &r) == -1);
+    CHECK(web_payload_parse_reply("<html>ok</html>", &r) == -1);
+    CHECK(web_payload_parse_reply("", &r) == -1);
+    CHECK(web_payload_parse_reply(NULL, &r) == -1);
+    CHECK(!r.ok && r.id == -1);
+    CHECK(web_payload_parse_reply("{\"ok\":true}", NULL) == -1);
+
+    /* Negative or non-numeric ids are reported as absent. */
+    CHECK(web_payload_parse_reply("{\"ok\":true,\"id\":-3,\"rows\":\"x\"}", &r) == 0);
+    CHECK(r.id == -1 && r.rows == -1);
+}
+
 int main(void)
 {
     test_urlencode();
@@ -144,6 +173,7 @@ int main(void)
     test_form_ok();
     test_form_no_data();
     test_form_encoding_and_limits();
+    test_parse_reply();
 
     if (s_failures != 0) {
         fprintf(stderr, "test_web_payload: %d of %d checks FAILED\n", s_failures, s_checks);

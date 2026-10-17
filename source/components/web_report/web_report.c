@@ -42,6 +42,13 @@ static bool s_started;
 /* wt_web task only. */
 static char s_form[WEB_PAYLOAD_FORM_MAX];
 
+/* Start of the server reply body (post.php replies with ~60 bytes of JSON). */
+typedef struct {
+    char buf[192];
+    int len;
+} web_body_t;
+static web_body_t s_body;
+
 /* ---- settings (same NVS rules as ha_config.c / wt_wifi.c) ---- */
 
 static void load_key(nvs_handle_t h, bool have_nvs, const char *key, char *dst, size_t size,
@@ -83,7 +90,29 @@ static void web_sink(const level_reading_t *r, void *ctx)
 
 /* ---- post task ---- */
 
-/* One blocking POST. Returns the HTTP status, or -1 with *err set on a transport error. */
+/* Keeps the start of the final response body; runs inside esp_http_client_perform(). */
+static esp_err_t http_event(esp_http_client_event_t *evt)
+{
+    web_body_t *b = evt->user_data;
+    if (evt->event_id == HTTP_EVENT_HEADERS_SENT) {
+        b->len = 0;  /* new request (also after a redirect) */
+        b->buf[0] = '\0';
+    } else if (evt->event_id == HTTP_EVENT_ON_DATA && evt->data_len > 0) {
+        int room = (int)sizeof(b->buf) - 1 - b->len;
+        int n = evt->data_len < room ? evt->data_len : room;
+        if (n > 0) {
+            memcpy(b->buf + b->len, evt->data, n);
+            b->len += n;
+            b->buf[b->len] = '\0';
+        }
+    }
+    return ESP_OK;
+}
+
+/*
+ * One blocking POST. Returns the HTTP status, or -1 with *err set on a
+ * transport error. The reply body is left in s_body.
+ */
 static int post_reading(const level_reading_t *r, esp_err_t *err)
 {
     *err = ESP_FAIL;
@@ -111,7 +140,11 @@ static int post_reading(const level_reading_t *r, esp_err_t *err)
         .timeout_ms = WEB_HTTP_TIMEOUT_MS,
         /* Used for https:// only; plain http:// ignores it. */
         .crt_bundle_attach = esp_crt_bundle_attach,
+        .event_handler = http_event,
+        .user_data = &s_body,
     };
+    s_body.len = 0;
+    s_body.buf[0] = '\0';
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (client == NULL) {
         *err = ESP_ERR_NO_MEM;
@@ -164,18 +197,30 @@ static void post_task(void *arg)
         last_try_us = now;
         esp_err_t err;
         int status = post_reading(&r, &err);
-        bool ok = (status == 200);
+        /* A 200 only counts when post.php itself answered {"ok":true}: a hosting
+         * error page or an unexecuted PHP file can also come back as 200. */
+        web_reply_t reply = {0};
+        bool ok = (status == 200) && web_payload_parse_reply(s_body.buf, &reply) == 0;
         if (ok) {
-            if (!last_ok) {
-                ESP_LOGI(TAG, "post ok (http 200)");
+            /* One I line per stored reading (at most one per period): the
+             * server-side row id is the proof that the database got it.
+             * No key=value tokens here, the bench checker samples those. */
+            if (reply.id >= 0 && reply.rows >= 0) {
+                ESP_LOGI(TAG, "post ok: http 200, stored as row %" PRId64 ", %" PRId64
+                         " rows in table", reply.id, reply.rows);
+            } else {
+                ESP_LOGI(TAG, "post ok: http 200, stored (server sent no row id)");
             }
             posted = true;
             posted_has_data = has_data;
             logged_fail = false;
         } else if (!logged_fail) {
             /* One W line per outage start, not one per retry (V-16e). */
-            if (status > 0) {
-                /* 401 = wrong API key, 404 = wrong URL, 5xx = server/database. */
+            if (status == 200) {
+                ESP_LOGW(TAG, "post rejected: http 200 but the reply is not from post.php");
+            } else if (status > 0) {
+                /* 3xx = URL redirects, 401 = wrong API key, 404 = wrong URL,
+                 * 5xx = server/database. */
                 ESP_LOGW(TAG, "post rejected: http %d", status);
             } else {
                 ESP_LOGW(TAG, "post failed: %s", esp_err_to_name(err));

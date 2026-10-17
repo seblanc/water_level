@@ -4,7 +4,8 @@
  * components/web_report/web_payload.c builds them; keep both sides in sync):
  *   key, device, distance_mm (empty when NO_DATA), status, age_ms, frames_ok,
  *   checksum_err, rssi, uptime_s, fw
- * Replies 200 {"ok":true,...}, 400 bad field, 401 bad key, 405 not POST,
+ * Replies 200 {"ok":true,"id":<row id>,"rows":<rows in table>,"level_pct":..}
+ * (the firmware parses ok/id/rows), 400 bad field, 401 bad key, 405 not POST,
  * 500 database error.
  */
 require __DIR__ . '/db.php';
@@ -77,6 +78,9 @@ try {
         time(), $device, $row['distance_mm'], $status, $row['age_ms'], $row['frames_ok'],
         $row['checksum_err'], $row['rssi'], $row['uptime_s'], $fw,
     ]);
+    /* Echoed to the ESP32, which logs them as proof the row was stored. */
+    $id = (int)$pdo->lastInsertId();
+    $rows = (int)$pdo->query("SELECT COUNT(*) FROM $t")->fetchColumn();
 
     /* Occasional pruning, about once per 500 posts. */
     $keep_days = (int)($cfg['keep_days'] ?? 0);
@@ -89,4 +93,4 @@ try {
     wt_json(['ok' => false, 'error' => 'database'], 500);
 }
 
-wt_json(['ok' => true, 'level_pct' => wt_level_percent($row['distance_mm'])]);
+wt_json(['ok' => true, 'id' => $id, 'rows' => $rows, 'level_pct' => wt_level_percent($row['distance_mm'])]);

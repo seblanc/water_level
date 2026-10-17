@@ -8,10 +8,12 @@ require __DIR__ . '/db.php';
 $cfg = wt_config();
 $latest = null;
 $history = [];
+$count = 0;
 $db_error = false;
 try {
     $latest = wt_latest();
     $history = wt_history(24);
+    $count = wt_count(24);
 } catch (Throwable $e) {
     error_log('water/index.php: ' . $e->getMessage());
     $db_error = true;
@@ -27,6 +29,7 @@ $initial = [
     'latest' => $latest,
     'history' => $history,
     'hours' => 24,
+    'count' => $count,
     'empty_cm' => (float)$cfg['empty_cm'],
     'full_cm' => (float)$cfg['full_cm'],
 ];
@@ -63,18 +66,57 @@ h1 { font-size: 1.6rem; margin: 0; letter-spacing: .02em; }
     position: relative; width: 180px; height: 260px; margin: 0 auto; border-radius: 22px 22px 28px 28px;
     border: 3px solid #4d6f96; background: linear-gradient(180deg, #0e1c2e, #0a1523); overflow: hidden;
 }
+/* Glass reflection on the left of the tank. */
+.tank::after {
+    content: ""; position: absolute; left: 12px; top: 12px; bottom: 12px; width: 10px; border-radius: 6px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .02)); pointer-events: none;
+}
 .water {
     position: absolute; left: 0; right: 0; bottom: 0; height: 0%;
     background: linear-gradient(180deg, var(--water), var(--water2)); transition: height 1.2s cubic-bezier(.2, .8, .2, 1);
 }
-.water::before, .water::after {
-    content: ""; position: absolute; left: -50%; width: 200%; height: 24px; top: -12px; border-radius: 45%;
-    background: var(--water); opacity: .55; animation: wave 6s linear infinite;
+/* Side shading so the water reads as a cylinder. */
+.water::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(90deg, rgba(255, 255, 255, .10), transparent 35%, transparent 65%, rgba(0, 0, 0, .18));
 }
-.water::after { opacity: .35; animation-duration: 9s; top: -9px; }
-@keyframes wave { from { transform: translateX(0) rotate(0); } to { transform: translateX(25%) rotate(360deg); } }
+/*
+ * Surface: two sine waves (SVG, twice the tank width) drifting sideways in
+ * opposite directions at different speeds. Shifting by exactly half the SVG
+ * width is a whole number of wave periods, so the loop has no visible seam.
+ * The front wave has the colour of the top of the water, so it joins the body.
+ */
+.waves {
+    position: absolute; left: 0; right: 0; bottom: 100%; height: 18px; margin-bottom: -1px; overflow: hidden;
+    animation: bob 3.2s ease-in-out infinite alternate;
+}
+.waves svg { position: absolute; left: 0; bottom: 0; width: 200%; height: 100%; display: block; animation: drift 6s linear infinite; }
+.waves .back { animation-duration: 10s; animation-direction: reverse; }
+.waves .back path { fill: #8fd0ff; opacity: .45; }
+.waves .front path { fill: var(--water); }
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes bob { from { transform: translateY(0); } to { transform: translateY(3px); } }
+.bubble {
+    position: absolute; bottom: 0; width: 6px; height: 6px; border-radius: 50%; opacity: 0;
+    border: 1px solid rgba(255, 255, 255, .7); background: rgba(255, 255, 255, .15);
+    animation: rise 5s ease-in infinite;
+}
+@keyframes rise {
+    0% { bottom: 0; opacity: 0; transform: translateX(0); }
+    15% { opacity: .8; }
+    50% { transform: translateX(4px); }
+    85% { opacity: .6; }
+    100% { bottom: 92%; opacity: 0; transform: translateX(-3px); }
+}
 .tank.nodata .water { background: linear-gradient(180deg, #4d5d72, #34414f); }
-.tank.nodata .water::before, .tank.nodata .water::after { background: #4d5d72; }
+.tank.nodata .waves .front path { fill: #4d5d72; }
+.tank.nodata .waves .back path { fill: #8a9bb0; }
+.tank.nodata .waves, .tank.nodata .waves svg { animation-play-state: paused; }
+.tank.nodata .bubble { display: none; }
+@media (prefers-reduced-motion: reduce) {
+    .waves, .waves svg { animation: none; }
+    .bubble { display: none; }
+}
 .ticks { position: absolute; inset: 0; pointer-events: none; }
 .ticks span { position: absolute; right: 8px; font-size: .7rem; color: rgba(255, 255, 255, .55); transform: translateY(50%); }
 .ticks span::after { content: ""; display: inline-block; width: 10px; height: 1px; background: rgba(255, 255, 255, .4); margin-left: 4px; vertical-align: middle; }
@@ -95,7 +137,7 @@ h1 { font-size: 1.6rem; margin: 0; letter-spacing: .02em; }
     padding: 4px 10px; margin-left: 4px; cursor: pointer; font: inherit; font-size: .85rem;
 }
 .range button.on { background: var(--water2); border-color: var(--water2); color: #fff; }
-svg { width: 100%; height: 220px; display: block; }
+#chart { width: 100%; height: 220px; display: block; }
 .empty-chart { fill: var(--muted); font-size: 13px; }
 footer { color: var(--muted); font-size: .78rem; text-align: center; margin-top: 18px; }
 </style>
@@ -109,7 +151,16 @@ footer { color: var(--muted); font-size: .78rem; text-align: center; margin-top:
 
     <section class="card top">
         <div class="tank" id="tank">
-            <div class="water" id="water"></div>
+            <div class="water" id="water">
+                <div class="waves" aria-hidden="true">
+                    <svg class="back" viewBox="0 0 400 20" preserveAspectRatio="none"><path d="M0 10 Q50 0 100 10 T200 10 T300 10 T400 10 V20 H0 Z"/></svg>
+                    <svg class="front" viewBox="0 0 400 20" preserveAspectRatio="none"><path d="M0 8 Q25 0 50 8 T100 8 T150 8 T200 8 T250 8 T300 8 T350 8 T400 8 V20 H0 Z"/></svg>
+                </div>
+                <span class="bubble" style="left:18%; animation-delay:0s; animation-duration:5.5s"></span>
+                <span class="bubble" style="left:42%; width:4px; height:4px; animation-delay:1.8s; animation-duration:4.2s"></span>
+                <span class="bubble" style="left:63%; animation-delay:3.1s; animation-duration:6.1s"></span>
+                <span class="bubble" style="left:80%; width:4px; height:4px; animation-delay:.9s; animation-duration:4.8s"></span>
+            </div>
             <div class="ticks">
                 <span style="bottom:100%">100%</span>
                 <span style="bottom:75%">75</span>
