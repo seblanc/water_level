@@ -1,6 +1,6 @@
 # SYSTEM ARCHITECTURE — Water Tank Level (project 1a95ca931d72)
 
-Last updated: run #5, ARCHITECTURE phase (attempt 1), 2026-10-17.
+Last updated: run #6, ARCHITECTURE phase (attempt 1), 2026-10-17.
 
 **Evidence state.** The Stage 1 firmware **has been compiled in CI** (GitHub Actions, `espressif/idf:v5.4.2`).
 Build #5 compiled and linked it, and Build #8 (`43e0382`) completed and uploaded artifact
@@ -23,7 +23,8 @@ document (no reference documents were provided).
 | #3 review (attempt 9) | Operator workflow fix `a45bcc0`. **Build #8 completed**, artifact uploaded. No source defects found |
 | #4 arch | No new builder result (Build #8 is still the latest). Read-only check of `../.github/workflows/nostromo-build.yml` settles the CI-artifact layout and the flashing procedure (§4.1, G13 closed). **Stage 2 (Home Assistant over MQTT) design worked out to implementable detail (§5)**, with runtime gating so the Stage 1 behaviour is unchanged when HA is not configured. Plan for the next implementation phase: DEVELOPMENT_PLAN.md M6a |
 | #4 impl (attempt 2, commit `7bac3ea`, recorded **failed**) | M6a steps 1–4 written: `ha_payload.{h,c}`, `test_ha_payload.c` + Makefile target, `ha_config.c`, `ha_mqtt.c`, `ha_mqtt.h`, `ha_mqtt_priv.h`. Steps 5–10 (CMake, `main` hook, Kconfig, `sdkconfig.defaults`, provisioning template, README, checker case) **not written**. The reason for the failure is not recorded in the tree (G20) |
-| **#5 arch (this phase)** | No new builder result (Build #8 is still the latest). Static review of the partial Stage 2 code (§5.10, F-22…F-29). Build-gating design for the remaining steps settled (§5.2, §5.10.2). M6a re-planned as the *remaining* steps 5–10 plus fixes (DEVELOPMENT_PLAN.md) |
+| #5 arch (commit `bba5d98`, recorded **failed**) | No new builder result. Static review of the partial Stage 2 code (§5.10, F-22…F-30). Build-gating design for the remaining steps settled (§5.2, §5.10.2). M6a re-planned as the *remaining* steps 5–10 plus fixes. The doc updates are in the tree even though the phase was recorded as failed; the reason is not recorded (G22) |
+| **#6 arch (this phase)** | No new builder result (Build #8 is still the latest); the source tree is unchanged since `7bac3ea`. Second read-only pass over the never-compiled Stage 2 code, this time against the IDF v5.4.2 API and the `-Werror=all` flags (§5.10.4): **no new compile blocker found**. One new runtime finding (F-31, console noise from esp-mqtt during broker outages). The M6a plan is confirmed unchanged |
 
 Earlier per-attempt detail is preserved in git history (commits `65c6ad9` … `bacd2c8`).
 
@@ -512,6 +513,33 @@ cannot be confirmed without a CI build.
 `components/` sub-directory that has no `CMakeLists.txt` (possibly with a notice), so a
 build of `7bac3ea` should still produce the Stage 1 image. Unverified; no build was run.
 
+#### 5.10.4 Run #6 compile-surface pass (read-only; API facts are [DATASHEET-RECALL] for IDF v5.4)
+This pass checks each external symbol and flag the Stage 2 sources rely on, so that the
+first CI build of M6a steps 5–7 has as few surprises as possible. **This is not a
+substitute for that build.**
+
+| Item | Where | Result |
+|------|-------|--------|
+| `esp_mqtt_client_config_t` v5 nested fields: `broker.address.uri`, `credentials.username`, `credentials.client_id`, `credentials.authentication.password`, `session.keepalive`, `session.last_will.{topic,msg,qos,retain}`, `network.reconnect_timeout_ms` | `ha_mqtt.c` `start_network()` | Match the v5 layout. A `msg_len` of 0 means `strlen(msg)` |
+| `esp_mqtt_error_codes_t.error_type` / `.connect_return_code`, `MQTT_ERROR_TYPE_CONNECTION_REFUSED` | `on_mqtt_event()` | Present in v5 |
+| `esp_mqtt_client_register_event(client, (esp_mqtt_event_id_t)ESP_EVENT_ANY_ID, …)` | `start_network()` | The documented idiom |
+| `IPSTR` / `IP2STR`, `ip_event_got_ip_t` | `on_net_event()` | Come in through `esp_netif.h` |
+| `wifi_event_sta_disconnected_t.reason` | `on_net_event()` | Cast to `int` for `%d`, so the field width doesn't matter |
+| `esp_read_mac` (`esp_mac.h`, `esp_hw_support`), `esp_check.h` macros, `log` | `ha_mqtt.c` | Common requirements, so no `REQUIRES` entry is needed |
+| `nvs.h` | `ha_config.c` | `nvs_flash` is in `PRIV_REQUIRES` (§5.10.2) |
+| `esp_app_desc.h` | `ha_mqtt.c` | Needs `esp_app_format` (F-23, already in the §5.10.2 text) |
+| `uxTaskGetStackHighWaterMark` | `publisher_task()` | Enabled by default in IDF FreeRTOS |
+| `strlcpy` | `ha_config.c`, `ha_mqtt.c` | Declared by IDF newlib `<string.h>` (used throughout IDF) |
+| `ESP_GOTO_ON_ERROR` / `ESP_GOTO_ON_FALSE` need a local `esp_err_t ret` and a `fail:` label | `start_network()` | Both present |
+| `-Wall` format checks | all `ESP_LOG*` calls | `%u` + `(unsigned)`, `%d` + `(int)`, `PRIu32`/`PRId32` for the fixed-width types, `%d` for Kconfig ints (plain literals) |
+| Unused statics / variables (`-Werror=unused-*`) | `ha_mqtt.c` | Every `HA_*` macro and static is referenced. With `WT_HA_ENABLE=n` the file is not compiled at all |
+| Host build `-std=c99 -Wall -Wextra -Werror` | `ha_payload.c` | Only C89/C99 library calls (`snprintf`, `strpbrk`, `strcspn`, `strstr`). `(unsigned)enum > CONST` compares against a non-negative constant, which does not trigger `-Wsign-compare` |
+| Kconfig names used in C | `ha_config.c`, `ha_mqtt.c` | `WT_WIFI_SSID`, `WT_WIFI_PASSWORD`, `WT_MQTT_BROKER_URI`, `WT_MQTT_USERNAME`, `WT_MQTT_PASSWORD`, `WT_HA_PUBLISH_PERIOD_MS`, `WT_HA_DISCOVERY_PREFIX`. Exactly the set planned in §5.10.2 item 4, and none exists yet |
+
+Residual compile risk: the `-Werror=all` behaviour of the GCC 13 toolchain bundled with
+IDF 5.4 on the network code (for example `-Wmissing-field-initializers` is not part of `-Wall`, so
+partial designated initialisers are safe). If the first build fails, the CI log decides.
+
 ## 6. Assumptions and gaps
 
 | ID | Gap / uncertainty | Assumption taken | Impact if wrong | Resolution path |
@@ -534,6 +562,7 @@ build of `7bac3ea` should still produce the Stage 1 image. Unverified; no build 
 | G18 | 2.4 GHz coverage at the tank (new) | Adequate RSSI | Frequent reconnects, gaps in HA | `ha` log lines show disconnect reasons. Optional RSSI field later |
 | G20 | Why run #4 implementation attempt 2 was recorded as failed (run #5) | Phase ended before steps 5–10; no build was triggered (no builder result after Build #8) | If the failure was a build error on a pushed commit, its log is missing here | Operator/platform supplies the failure reason or a CI log for `7bac3ea` if one exists |
 | G21 | Will IDF ignore `components/ha_mqtt/` without `CMakeLists.txt`? (run #5) | Yes, the directory is skipped and the Stage 1 image builds | If wrong, any build of `7bac3ea` fails at configure time | Moot once M6a step 5 lands |
+| G22 | Why run #5 architecture (`bba5d98`) was recorded as failed (run #6) | Platform-side outcome; the deliverables it wrote are present and consistent with the tree | If a doc defect caused it, it is not identifiable from the tree | Operator/platform supplies the reason |
 | G19 | Bundled `mqtt` component in future IDF versions | Present in v5.4.2 | Build break on IDF ≥ 6 if it is moved to the component registry **[ASSUMPTION]** | CI pins v5.4.2; revisit on an IDF upgrade |
 
 ## 7. Implementation status and static review
@@ -576,6 +605,7 @@ build of `7bac3ea` should still produce the Stage 1 image. Unverified; no build 
 | F-27 (run #5) | `esp_mqtt_client_publish()` performs socket I/O in `wt_ha` and can block it for the network timeout | Accepted by design: the reporter only does `xQueueOverwrite` (§5.5). V-13e checks the UART stream during an outage |
 | F-28 (run #5) | `ha_mqtt.c`/`ha_config.c` emit log lines not in §8 (`discovery published, wt_ha stack free=`, `wifi connect failed`, `mqtt connection refused/error`, `mqtt start failed`, `nvs key … unreadable`, `reconnect timer:`) | **Done in this phase**: §8 updated. No code change needed |
 | F-29 (run #5) | Only the `wifi` tag is lowered to WARN. Other network tags (e.g. `phy_init`, `esp_netif_handlers`, `net80211`, `pp`) may still print INFO lines at connect **[ASSUMPTION]** | Harmless for `check_log.py` (it reads only `wt:` report lines and crash patterns). Observe in V-13b; lower more tags only if the console becomes noisy |
+| F-31 (run #6) | During a broker outage, esp-mqtt and its transport print their own `E`/`W` lines (tags such as `mqtt_client`, `transport_base`, `esp-tls`) on **every** reconnect attempt, i.e. every `HA_MQTT_RECONNECT_MS` = 10 s **[DATASHEET-RECALL]**. That defeats the "once per outage" intent of the `ha` lines | Accepted for M6a, no code change. These lines contain none of the V-12 failure patterns, so `check_log.py` verdicts are unaffected. Observe the noise in V-13e/V-13f. If it is a problem, lower those tags with `esp_log_level_set(..., ESP_LOG_NONE)` or `ESP_LOG_ERROR`, together with F-29 |
 | F-30 (run #5) | Once Stage 2 links, the app is expected to exceed the 1 MB default partition (§5.8), so the CMake/Kconfig commit without `CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y` would likely fail at the size check **[ASSUMPTION]** | Open: M6a step 7 goes into the same commit as steps 5–6 |
 
 ### 7.3 ESP-IDF APIs used (build-compatibility surface)
@@ -653,6 +683,8 @@ Future fields must only be appended.
   - `W ha: nvs key <key> unreadable (<err>), using Kconfig value` / `W ha: nvs namespace wt_cfg not readable (<err>), …`
   - `E ha: <step>: <err>` from the `ESP_*_ON_*` macros, then `E ha: init failed: <err>; HA off`
   - Other network tags (`phy_init`, `esp_netif_handlers`, …) may add INFO lines (F-29).
+  - esp-mqtt tags (`mqtt_client`, `transport_base`, `esp-tls`) may print `E` lines every
+    ~10 s while the broker is unreachable (F-31). They are not failures under V-12.
 
 **Host parsing rule:** a line matching `\bwt: distance_mm=` is a report line. Parse the
 fields as whitespace-separated `key=value` pairs. Any `Guru Meditation`, `abort()`,

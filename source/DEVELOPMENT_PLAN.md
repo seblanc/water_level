@@ -9,7 +9,7 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #5, ARCHITECTURE phase (attempt 1), 2026-10-17.
+Last updated: run #6, ARCHITECTURE phase (attempt 1), 2026-10-17.
 
 ## Milestones
 
@@ -19,6 +19,7 @@ Last updated: run #5, ARCHITECTURE phase (attempt 1), 2026-10-17.
 - [x] Run #4: docs condensed. CI-artifact flashing procedure derived from the workflow, read-only (§4.1, G13 closed, F-20)
 - [x] Run #4: **Stage 2 design** (SYSTEM_ARCHITECTURE.md §5): MQTT + HA discovery, runtime gating, NVS provisioning, topics/payloads, task model, reconnect policy, resource budget, new gaps G17–G19
 - [x] Run #5: static review of the partial Stage 2 code from `7bac3ea` (SYSTEM_ARCHITECTURE.md §5.10, F-22…F-30); build-gating decisions for the remaining steps (§5.10.2); §8 event lines updated (F-28)
+- [x] Run #6: compile-surface pass over the Stage 2 sources against IDF v5.4 APIs and warning flags (SYSTEM_ARCHITECTURE.md §5.10.4). No new blocker; F-31 (esp-mqtt console noise) recorded as accepted. M6a below is unchanged
 - [ ] Operator confirms or corrects G1 (pin direction), G2 (module type), G5 (broker/HA setup), G6 (acceptance criteria AC-1…AC-8)
 
 ### M1–M4 — Stage 1 firmware (written runs #1–#3; **CI-compiled**, Builds #5–#8)
@@ -68,6 +69,11 @@ rewrite them**; only apply the listed fixes.
 
 **Steps 5, 6 and 7 go into one change** (F-22, F-30): any one of them alone is expected
 to break the build. Use the exact text in SYSTEM_ARCHITECTURE.md §5.10.2.
+
+**Execution order (run #6):** steps 5–7 first, then step 8, then the step 4 fixes (F-25/F-26),
+then 9–10. The point is to get Stage 2 into a CI build as early as possible: two phases
+in a row (run #4 impl, run #5 arch) ended as "failed" without a build. The F-25 fix is
+small and independent, and it can wait if the phase runs short.
 
 5. [ ] `components/ha_mqtt/CMakeLists.txt`: `ha_payload.c` always; `ha_config.c` and
    `ha_mqtt.c` only `if(CONFIG_WT_HA_ENABLE)`. `REQUIRES level_report`; `PRIV_REQUIRES

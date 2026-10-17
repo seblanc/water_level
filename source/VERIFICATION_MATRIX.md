@@ -10,6 +10,13 @@ is `NOT VERIFIED` or `DEFERRED`. Nothing has been flashed, run, or measured, and
 tests have not been executed. **CI build evidence is compilation evidence only, not
 hardware verification.**
 
+Run #6, ARCHITECTURE phase (attempt 1), 2026-10-17: there is no new builder result
+(Build #8 is still the latest) and the source tree has not changed since `7bac3ea`. A
+read-only compile-surface pass (SYSTEM_ARCHITECTURE.md §5.10.4) found no new blocker.
+F-31 adds an expectation to V-13e/V-13f: esp-mqtt prints `E` lines every ~10 s while the
+broker is down, and these are not failures. **No check result changed. Nothing was
+compiled, executed or measured in this phase.**
+
 Run #5, ARCHITECTURE phase (attempt 1), 2026-10-17: there is still no builder result after
 Build #8. Commit `7bac3ea` added partial Stage 2 sources (`components/ha_mqtt/*` without a
 `CMakeLists.txt`, `test/host/test_ha_payload.c`). They are **not in any build and have never
@@ -96,7 +103,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-13b | R-08 | Log | Provision NVS (§5.3), reboot | `ha: enabled id=wt_xxxxxx ...`, `wifi connected ip=...`, `mqtt connected` within 30 s | Board, Wi-Fi AP, broker | DEFERRED |
 | V-13c | R-08b | HA UI + `mosquitto_sub -v -t 'watertank/#' -t 'homeassistant/#'` | After V-13b | Retained discovery configs present; device "Water tank" with a "Distance" entity (mm) in HA; state updates every ~10 s and matches the UART `distance_mm` | Broker, HA | DEFERRED |
 | V-13d | R-08c | Fault injection | Disconnect the sensor TX for ≥ 15 s, then reconnect | `watertank/<id>/sensor` → `offline` within ≤ 3 s (one report period after NO_DATA); the HA entity becomes unavailable; it returns after reconnect | Broker, HA, sensor | DEFERRED |
-| V-13e | R-08d | Fault injection | Switch off the AP (or block the device) for 2 min, then restore | `wifi disconnected` + backoff lines; UART report lines continue at 1 Hz throughout; reconnect without reboot; HA marks the device unavailable via the LWT (broker keepalive timeout) and recovers | AP control, broker, HA | DEFERRED |
+| V-13e | R-08d | Fault injection | Switch off the AP (or block the device) for 2 min, then restore | `wifi disconnected` + backoff lines (periodic esp-mqtt `E` lines are expected, F-31); UART report lines continue at 1 Hz throughout; reconnect without reboot; HA marks the device unavailable via the LWT (broker keepalive timeout) and recovers | AP control, broker, HA | DEFERRED |
 | V-13f | R-08d | Fault injection | Restart the broker / HA | `mqtt disconnected` → `mqtt connected`; discovery and availability republished; entity recovers without a device reboot | Broker | DEFERRED |
 | V-13g | R-08f | Log (auto: `--check v05`, `--check v12`) | Provisioned and connected: capture ≥ 60 s (V-05) and ≥ 1 h (V-12) | Same pass criteria as V-05 / V-12; no `Brownout detector`; `cks_err` rate as in V-10 (G17). Record the `wt_ha` stack high-water mark if logged | Board, sensor, Wi-Fi, broker | DEFERRED |
 
@@ -144,5 +151,5 @@ All eight criteria are still **proposals** (G6) until the operator confirms them
 | 2026-10-17 | V-01 | Build #7 (`d11d329`) | Same as #5 (size not in the excerpt) | Post-build esptool hint, then the same packaging error |
 | 2026-10-17 | V-01 | Build #8 (`43e0382`, after operator fix `a45bcc0`) | **CI job COMPLETED**. Passes except the "no warnings" sub-criterion. Compilation evidence only | "Artifact nostromo-firmware-8 has been successfully uploaded! Final size is 32716500 bytes. Artifact ID is 12094526795"; zip SHA256 `5d335266a1c0536bd8af73ace958f953ffdf2a2dd79c0ac0bf3cbdecaba31a3b`; 1360 files |
 
-No other check has been executed. No build result exists for commits `184d5de` or
-`7bac3ea`.
+No other check has been executed. No build result exists for commits `184d5de`,
+`7bac3ea` or `bba5d98`.
