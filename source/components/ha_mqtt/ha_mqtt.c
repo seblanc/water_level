@@ -10,9 +10,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_mac.h"
-#include "esp_netif.h"
 #include "esp_timer.h"
-#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -21,6 +19,7 @@
 #include "level_report.h"
 #include "mqtt_client.h"
 #include "sdkconfig.h"
+#include "wt_wifi.h"
 
 /* Below the reporter (4) and sensor RX (5) tasks: network work never delays them. */
 #define HA_TASK_PRIO          3
@@ -46,8 +45,9 @@ static QueueHandle_t s_queue;
 static esp_mqtt_client_handle_t s_client;
 static bool s_started;
 
-/* Event loop task only. */
+/* wt_ha task only. */
 static bool s_mqtt_started;
+static bool s_mqtt_start_error_logged;
 
 /* Set by the MQTT event handler, read by the wt_ha task. */
 static volatile bool s_mqtt_connected;
@@ -81,6 +81,26 @@ static bool publish_announce(void)
     return publish(s_topic_avail, HA_AVAIL_ONLINE, 1, true);
 }
 
+/*
+ * Wi-Fi is owned by wt_wifi (run #12). The MQTT client is started from this
+ * task, once, as soon as the station has an IP; after that esp-mqtt
+ * reconnects on its own. Polling here (once per reading) avoids a start race
+ * between an IP event handler and ha_mqtt_start().
+ */
+static void start_mqtt_when_online(void)
+{
+    if (s_mqtt_started || !wt_wifi_is_connected()) {
+        return;
+    }
+    esp_err_t err = esp_mqtt_client_start(s_client);
+    if (err == ESP_OK) {
+        s_mqtt_started = true;
+    } else if (!s_mqtt_start_error_logged) {
+        s_mqtt_start_error_logged = true;  /* retried silently with every reading */
+        ESP_LOGE(TAG, "mqtt start failed: %s", esp_err_to_name(err));
+    }
+}
+
 static void publisher_task(void *arg)
 {
     (void)arg;
@@ -96,6 +116,7 @@ static void publisher_task(void *arg)
         if (xQueueReceive(s_queue, &r, portMAX_DELAY) != pdTRUE) {
             continue;
         }
+        start_mqtt_when_online();
         if (!s_mqtt_connected) {
             /* No backlog while offline: everything is re-sent after the next connect. */
             state_sent = false;
@@ -140,25 +161,6 @@ static void publisher_task(void *arg)
                 last_state_us = now;
                 state_sent = true;
             }
-        }
-    }
-}
-
-/* ---- Wi-Fi is owned by wt_wifi (run #12); MQTT starts on the first IP ---- */
-
-static void on_got_ip(void *arg, esp_event_base_t base, int32_t id, void *data)
-{
-    (void)arg;
-    (void)base;
-    (void)id;
-    (void)data;
-    if (!s_mqtt_started) {
-        /* After the first start, esp-mqtt reconnects on its own. */
-        esp_err_t err = esp_mqtt_client_start(s_client);
-        if (err == ESP_OK) {
-            s_mqtt_started = true;
-        } else {
-            ESP_LOGE(TAG, "mqtt start failed: %s", esp_err_to_name(err));
         }
     }
 }
@@ -242,52 +244,10 @@ static void log_enabled(void)
 static esp_err_t start_network(void)
 {
     esp_err_t ret = ESP_OK;
-    bool wifi_inited = false;
 
     /* Never deleted: once the sink is registered the reporter task writes to it. */
     s_queue = xQueueCreate(1, sizeof(level_reading_t));
     ESP_RETURN_ON_FALSE(s_queue != NULL, ESP_ERR_NO_MEM, TAG, "queue");
-
-    const esp_timer_create_args_t timer_args = {
-        .callback = retry_timer_cb,
-        .name = "ha_retry",
-    };
-    ESP_GOTO_ON_ERROR(esp_timer_create(&timer_args, &s_retry_timer), fail, TAG, "retry timer");
-
-    ESP_GOTO_ON_ERROR(esp_netif_init(), fail, TAG, "netif init");
-    ret = esp_event_loop_create_default();
-    if (ret == ESP_ERR_INVALID_STATE) {
-        ret = ESP_OK;  /* already created */
-    }
-    ESP_GOTO_ON_ERROR(ret, fail, TAG, "event loop");
-    ESP_GOTO_ON_FALSE(esp_netif_create_default_wifi_sta() != NULL, ESP_ERR_NO_MEM, fail, TAG,
-                      "wifi netif");
-
-    esp_log_level_set("wifi", ESP_LOG_WARN);
-    wifi_init_config_t wifi_init = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_GOTO_ON_ERROR(esp_wifi_init(&wifi_init), fail, TAG, "wifi init");
-    wifi_inited = true;
-    /* Credentials come from wt_cfg; do not let the driver copy them into NVS. */
-    ESP_GOTO_ON_ERROR(esp_wifi_set_storage(WIFI_STORAGE_RAM), fail, TAG, "wifi storage");
-
-    ESP_GOTO_ON_ERROR(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
-                                                          on_net_event, NULL, NULL),
-                      fail, TAG, "wifi handler");
-    ESP_GOTO_ON_ERROR(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                                                          on_net_event, NULL, NULL),
-                      fail, TAG, "ip handler");
-
-    wifi_config_t wifi_cfg;
-    memset(&wifi_cfg, 0, sizeof(wifi_cfg));
-    memcpy(wifi_cfg.sta.ssid, s_cfg.wifi_ssid,
-           strnlen(s_cfg.wifi_ssid, sizeof(wifi_cfg.sta.ssid)));
-    memcpy(wifi_cfg.sta.password, s_cfg.wifi_pass,
-           strnlen(s_cfg.wifi_pass, sizeof(wifi_cfg.sta.password)));
-    wifi_cfg.sta.threshold.authmode =
-        s_cfg.wifi_pass[0] != '\0' ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
-    ESP_GOTO_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), fail, TAG, "wifi mode");
-    ESP_GOTO_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg), fail, TAG,
-                      "wifi config (password must be empty or >= 8 characters)");
 
     const esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = s_cfg.mqtt_uri,
@@ -319,25 +279,17 @@ static esp_err_t start_network(void)
     ESP_GOTO_ON_FALSE(xTaskCreate(publisher_task, "wt_ha", HA_TASK_STACK, NULL, HA_TASK_PRIO,
                                   NULL) == pdPASS,
                       ESP_ERR_NO_MEM, fail, TAG, "publisher task");
-
-    /* Last step: STA_START triggers the first connect attempt. */
-    ESP_GOTO_ON_ERROR(esp_wifi_start(), fail, TAG, "wifi start");
     return ESP_OK;
 
 fail:
     /*
-     * Nothing has been started at this point, so nothing can publish. The
-     * queue (and the publisher task, if created) stay allocated but idle: a
-     * registered sink cannot be removed. The Wi-Fi/IP event handler instances
-     * and the default STA netif also stay registered (F-26): after
-     * esp_wifi_deinit() no Wi-Fi events fire, and this path runs at most once.
+     * The task was not created, so nothing can publish. The queue stays
+     * allocated but idle (a registered sink cannot be removed); this path
+     * runs at most once.
      */
     if (s_client != NULL) {
         esp_mqtt_client_destroy(s_client);
         s_client = NULL;
-    }
-    if (wifi_inited) {
-        esp_wifi_deinit();
     }
     return ret;
 }
@@ -351,7 +303,7 @@ esp_err_t ha_mqtt_start(void)
 
     ha_config_load(&s_cfg);
     if (s_cfg.wifi_ssid[0] == '\0' || s_cfg.mqtt_uri[0] == '\0') {
-        /* Runtime gate (§5.2): no netif, no Wi-Fi, no task. Stage 1 behaviour. */
+        /* Runtime gate (§5.2): no MQTT client, no task. */
         ESP_LOGI(TAG, "disabled (no wifi_ssid/mqtt_uri configured)");
         return ESP_OK;
     }

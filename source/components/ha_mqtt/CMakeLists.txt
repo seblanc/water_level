@@ -10,5 +10,5 @@ idf_component_register(
     SRCS ${srcs}
     INCLUDE_DIRS "include"
     REQUIRES level_report
-    PRIV_REQUIRES esp_wifi esp_netif esp_event nvs_flash mqtt esp_timer esp_app_format
+    PRIV_REQUIRES wt_wifi esp_event nvs_flash mqtt esp_timer esp_app_format
 )

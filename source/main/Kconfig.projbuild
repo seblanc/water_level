@@ -60,34 +60,72 @@ menu "Water Tank Sensor"
         range 3 15
         default 5
 
-    menu "Home Assistant"
-
-        config WT_HA_ENABLE
-            bool "Compile in Home Assistant (Wi-Fi + MQTT discovery)"
-            default y
-            help
-                Builds the ha_mqtt component. At boot it only starts Wi-Fi and MQTT
-                if a Wi-Fi SSID and a broker URI are configured (NVS namespace
-                "wt_cfg" first, then the values below). Otherwise it logs
-                "ha: disabled" and the firmware behaves like Stage 1.
+    menu "Wi-Fi"
 
         config WT_WIFI_SSID
             string "Wi-Fi SSID"
-            depends on WT_HA_ENABLE
             default ""
             help
-                Fallback when the NVS key wifi_ssid is absent. Credentials belong
-                in NVS (tools/nvs_config.example.csv) or a local, git-ignored
-                sdkconfig, never in sdkconfig.defaults.
+                Fallback when the NVS key wifi_ssid is absent. Empty = Wi-Fi off
+                (no web report, no Home Assistant). Shared by every network
+                feature (components/wt_wifi).
 
         config WT_WIFI_PASSWORD
             string "Wi-Fi password"
-            depends on WT_HA_ENABLE
             default ""
             help
                 Fallback when the NVS key wifi_pass is absent. Empty = open network,
-                otherwise at least 8 characters (WPA2/WPA3). Never put it in
-                sdkconfig.defaults.
+                otherwise at least 8 characters (WPA2/WPA3). Never logged.
+
+    endmenu
+
+    menu "Web report (PHP server)"
+
+        config WT_WEB_ENABLE
+            bool "Post readings to a PHP endpoint over HTTP(S)"
+            default y
+            help
+                Builds the web_report component: once Wi-Fi is up, the newest
+                reading is POSTed (form-encoded) to the URL below every
+                WT_WEB_POST_PERIOD_MS. Server side: web/water/ in this repository.
+
+        config WT_WEB_POST_URL
+            string "POST endpoint URL"
+            depends on WT_WEB_ENABLE
+            default "https://randoresto.ch/water/post.php"
+            help
+                Fallback when the NVS key web_url is absent. Empty disables the web
+                report at runtime. https:// URLs are verified against the ESP-IDF
+                certificate bundle.
+
+        config WT_WEB_API_KEY
+            string "API key (must match $config['api_key'] in config.php)"
+            depends on WT_WEB_ENABLE
+            default ""
+            help
+                Fallback when the NVS key web_key is absent. Sent as the form field
+                "key"; the server rejects posts with a wrong key. Never logged.
+
+        config WT_WEB_POST_PERIOD_MS
+            int "Post interval (ms)"
+            depends on WT_WEB_ENABLE
+            range 5000 3600000
+            default 60000
+            help
+                One HTTP request per interval. A post is also sent at once when the
+                sensor goes to or from NO_DATA. The console report is not affected.
+
+    endmenu
+
+    menu "Home Assistant"
+
+        config WT_HA_ENABLE
+            bool "Compile in Home Assistant (MQTT discovery)"
+            default y
+            help
+                Builds the ha_mqtt component. At boot it only starts MQTT if a
+                Wi-Fi SSID and a broker URI are configured (NVS namespace "wt_cfg"
+                first, then the Kconfig values). Otherwise it logs "ha: disabled".
 
         config WT_MQTT_BROKER_URI
             string "MQTT broker URI"

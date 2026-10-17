@@ -2,8 +2,9 @@
  * Home Assistant integration over MQTT (Stage 2, SYSTEM_ARCHITECTURE.md §5).
  *
  * Registers a level_report sink that hands readings to a background
- * publisher task. Wi-Fi and MQTT run entirely in the background: network
- * failures are retried and never stop the console report stream.
+ * publisher task. Wi-Fi is owned by wt_wifi; the MQTT client starts once the
+ * station has an IP. Network failures are retried and never stop the console
+ * report stream.
  */
 #pragma once
 
@@ -15,8 +16,8 @@ extern "C" {
 
 /*
  * Load the settings (NVS namespace "wt_cfg", Kconfig fallback per key) and,
- * if a Wi-Fi SSID and a broker URI are configured, start Wi-Fi, the MQTT
- * client and the publisher task.
+ * if a Wi-Fi SSID and a broker URI are configured, create the MQTT client
+ * and the publisher task. Wi-Fi itself is started by wt_wifi_start().
  *
  * Call once from app_main, after nvs_flash_init() and level_report_init(),
  * and before the reporter task is created (level_report_add_sink rule).
