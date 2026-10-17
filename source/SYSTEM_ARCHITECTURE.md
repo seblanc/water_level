@@ -26,6 +26,10 @@ Status history:
   the firmware on `espressif/idf:v5.4.2` (`water_tank.bin`, 0x35210 bytes). The job then
   failed in the workflow's packaging step on a git "dubious ownership" error (F-19, G16),
   not on a compile error. G4/G13 resolved, and F-01/F-10/F-12 (≥ v5.3 branch) build-confirmed.
+- Run #3, IMPLEMENTATION phase (attempt 7, 2026-10-17): CI Build #6 (`b05cc7f`) gave the same
+  result as #5. Compile and link succeeded with the same image size, then packaging failed on
+  "dubious ownership" (F-19). The workflow file still lacks the `safe.directory` fix
+  (read-only check). No source changes.
 
 **Compiled in CI only (Build #5). Nothing has been flashed or tested on hardware.** No agent
 phase so far had a shell, a toolchain, or bench access. Hardware facts below either come from the project
@@ -327,7 +331,7 @@ implementation phase.
 | F-16 | `.gitignore` ignores `*.log`, so bench captures named `*.log` (README examples) will not be committed as evidence | Low (evidence handling) | Store evidence captures as `test/bench/evidence/<check>-<date>.txt`, or `git add -f`. No code change needed |
 | F-17 | Builds #2 (2026-10-16) and #3 (2026-10-17) were both blocked at `git push` (HTTP 403) before any compilation. The identical error shows the credentials were not changed between attempts | High (blocks V-01) | Platform/operator credential fix (G14). No source change can resolve it. Re-triggering without changing the credentials will give the same result. **Superseded by F-18 (Build #4)** |
 | F-18 | Build #4 (2026-10-17) got past the 403 but was rejected by GitHub: the PAT has no `workflow` scope, and the push includes `.github/workflows/nostromo-build.yml` (commit `c4a0c6d`). Still no compilation | High (blocks V-01) | Operator token-scope fix (G15). No source change can resolve it. The workflow file lives outside `source/` and must not be removed by an agent. **Resolved by Build #5** (push accepted, CI checked out `d587225`) |
-| F-19 | Build #5 (2026-10-17, `d587225`): the compile and link of all project components succeeded on IDF v5.4.2. The job then failed in "Package binaries and build evidence": `git rev-parse HEAD` exit 128, "dubious ownership" | High (blocks V-01 completion and artifact upload) | Operator workflow fix (G16). No source change. The truncated log excerpt (from step 960/1004) shows no warnings or errors for project objects. Earlier steps were not supplied, so "no warnings" is unconfirmed |
+| F-19 | Build #5 (2026-10-17, `d587225`): the compile and link of all project components succeeded on IDF v5.4.2. The job then failed in "Package binaries and build evidence": `git rev-parse HEAD` exit 128, "dubious ownership" | High (blocks V-01 completion and artifact upload) | Operator workflow fix (G16). No source change. The truncated log excerpt (from step 960/1004) shows no warnings or errors for project objects. Earlier steps were not supplied, so "no warnings" is unconfirmed. **Build #6 (`b05cc7f`) reproduced it identically**: the workflow was unchanged, and lines 53/97 still lack `safe.directory` |
 
 ### 7.3 ESP-IDF APIs used (build-compatibility surface)
 `uart_driver_install`, `uart_param_config` (`UART_SCLK_DEFAULT`), `uart_set_pin`,

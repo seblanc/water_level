@@ -4,9 +4,19 @@ The ACCEPTANCE spec is empty (revision 1) and there are no structured requiremen
 The requirements and acceptance criteria below are **derived** from PURPOSE, FLASHING and
 TELEMETRY revision 1. They are **proposals that need operator confirmation** (gap G6).
 
-**Only one check has partial evidence:** V-01 compile step (CI Build #5, see the results
+**Only one check has partial evidence:** V-01 compile step (CI Builds #5 and #6, see the results
 log). Every other result is `NOT VERIFIED` (or `DEFERRED`). Nothing has been flashed, run,
 or measured, and the host tests have not been executed.
+
+Run #3, IMPLEMENTATION phase (attempt 7), 2026-10-17: GitHub Actions Build #6 (commit
+`b05cc7f`) reproduced Build #5 exactly. Compile and link succeeded, with an identical
+`water_tank.bin` of 0x35210 bytes. That is expected, because attempt 6 changed only
+documentation. The job then failed again in "Package binaries and build evidence" with
+the same git "dubious ownership" error (F-19, G16). A read-only look at
+`.github/workflows/nostromo-build.yml` shows that `git rev-parse HEAD` (lines 53 and 97)
+still has no `safe.directory` step before it. **Re-triggering without the operator's
+workflow fix will fail the same way.** Source files are unchanged in this phase, because
+there is no compile error to fix.
 
 Run #3, IMPLEMENTATION phase (attempt 6), 2026-10-17: GitHub Actions Build #5 (commit
 `d587225`, image `espressif/idf:v5.4.2`) **compiled and linked the firmware**:
@@ -129,7 +139,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED | Build half: Build #5 compiled and linked without errors on IDF v5.4.2, but the CI job failed in packaging (F-19), and project-source warnings cannot be checked from the truncated log. Host half: V-09/V-09b never executed (no host compiler). Earlier: Build #1 blocked (F-15), #2/#3 (403, F-17), #4 (`workflow` scope, F-18) |
+| AC-1 | NOT VERIFIED | Build half: Builds #5 and #6 compiled and linked without errors on IDF v5.4.2, but both CI jobs failed in packaging (F-19), and project-source warnings cannot be checked from the truncated log. Host half: V-09/V-09b never executed (no host compiler). Earlier: Build #1 blocked (F-15), #2/#3 (403, F-17), #4 (`workflow` scope, F-18) |
 | AC-2 | NOT VERIFIED | No hardware access (V-02) |
 | AC-3 | NOT VERIFIED | Needs board + sensor + log capture (V-03, V-05); pin direction G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Needs tape measure and target (V-06); tolerance is an assumption |
@@ -147,5 +157,6 @@ All six criteria are also still **proposals** (G6) until the operator confirms t
 | 2026-10-17 | V-01 | GitHub Actions Build #3 (commit "pending") | **BLOCKED**, not executed. Same 403 on `git push` as Build #2, so the credentials were not changed between builds. Not compiled. Neither a pass nor a fail | Builder message: "remote: Permission to seblanc/water_level.git denied to seblanc. fatal: unable to access 'https://github.com/seblanc/water_level.git/': The requested URL returned error: 403" |
 | 2026-10-17 | V-01 | GitHub Actions Build #4 (commit "pending") | **BLOCKED**, not executed. The 403 is gone, but the remote rejected the ref update because the token has no `workflow` scope. Not compiled. Neither a pass nor a fail | Builder message: "! [remote rejected] HEAD -> main (refusing to allow a Personal Access Token to create or update workflow `.github/workflows/nostromo-build.yml` without `workflow` scope)" |
 | 2026-10-17 | V-01 | GitHub Actions Build #5 (commit `d587225`, `espressif/idf:v5.4.2`) | **Compile + link PASSED; CI job FAILED** (post-build packaging step, F-19). The firmware image was produced but not uploaded. Not a full V-01 pass | CI log: "[1004/1004] … Project build complete", "water_tank.bin binary size 0x35210 bytes. Smallest app partition is 0x100000 bytes. 0xcadf0 bytes (79%) free.", then "fatal: detected dubious ownership in repository at '/__w/water_level/water_level'" → "Process completed with exit code 128". Project objects built: `a02yyuw.c`, `a02yyuw_parser.c`, `a02yyuw_filter.c`, `level_report.c`, `level_report_uart.c`, `main.c` |
+| 2026-10-17 | V-01 | GitHub Actions Build #6 (commit `b05cc7f`, `espressif/idf:v5.4.2`) | **Compile + link PASSED; CI job FAILED**, the same as Build #5 (F-19). The workflow was not changed between builds. Not a full V-01 pass | CI log: "[1004/1004] … Project build complete", "water_tank.bin binary size 0x35210 bytes … 0xcadf0 bytes (79%) free.", then "fatal: detected dubious ownership in repository at '/__w/water_level/water_level'" → "Process completed with exit code 128" |
 
 No other check has been executed.

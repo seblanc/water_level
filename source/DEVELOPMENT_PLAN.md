@@ -71,6 +71,11 @@ Last updated: run #3, IMPLEMENTATION phase (attempt 5), 2026-10-17.
 - [ ] Operator: in `.github/workflows/nostromo-build.yml` step "Package binaries and build evidence", add `git config --global --add safe.directory "$GITHUB_WORKSPACE"` before `git rev-parse HEAD` (or write `${{ github.sha }}` instead). Then re-trigger the build, which should upload `nostromo-firmware-<id>`
 - [ ] Next phase: if the full CI log becomes available, scan it for warnings from `components/` and `main/` (V-01 "no warnings" criterion)
 
+### M4i — Run #3 implementation (attempt 7; documentation only)
+- [x] Recorded Build #6 (`b05cc7f`): the same result as Build #5. Compile + link succeeded (identical 0x35210-byte image), then packaging failed on git "dubious ownership" (F-19). No source changes
+- [x] Read-only check: `.github/workflows/nostromo-build.yml` still runs `git rev-parse HEAD` (lines 53, 97) without `safe.directory`, so the M4h operator item has not been applied yet
+- [ ] Operator (same as M4h, still open, **blocking**): apply the workflow fix **before** re-triggering. Without it, every build fails the same way regardless of the source
+
 ### M5 — Build and bench verification (needs a toolchain and hardware; operator or a bench-enabled phase)
 Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRIX.md:
 
