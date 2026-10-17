@@ -11,6 +11,24 @@ with no reported communication errors."* It is tracked as R-10 / **AC-VS3** / **
 below. Only its operational reading (SYSTEM_ARCHITECTURE.md §4.2.1) is an interpretation
 (G24).
 
+Run #18, REVIEW phase, 2026-10-17: operator asked for the hostname `espwatertank` (R-12).
+**Build #17 (`080af2e`, current HEAD, clean worktree) completed** (artifact
+`nostromo-firmware-17`, 35936529 B, 1372 files), so the change compiles and links. Static
+review of `wt_wifi.c`, `main/Kconfig.projbuild`, `sdkconfig.defaults` and README found no
+defect:
+- `esp_netif_set_hostname()` is called right after `esp_netif_create_default_wifi_sta()`
+  and before `esp_wifi_start()`. In IDF 5.x the name is stored on the esp_netif and copied
+  into the lwIP netif when the interface starts, so the first DHCP DISCOVER carries option 12
+  `espwatertank`. Failure only logs a W line; `CONFIG_LWIP_LOCAL_HOSTNAME="espwatertank"`
+  is the fallback.
+- 12 characters, within the 32-character limit (`ESP_NETIF_HOSTNAME_MAX_SIZE`).
+- The new `starting ssid=..., hostname espwatertank` line has no `hostname=` token (F-36 rule).
+- Limitation, not a defect: there is no mDNS responder, so `espwatertank.local` only resolves
+  if the router registers DHCP names in its DNS. A local build directory with an old `sdkconfig`
+  keeps its old `CONFIG_LWIP_LOCAL_HOSTNAME` value; CI builds start clean.
+
+**No source change in this review. Build #17 has not been flashed; V-18a/V-18b are NOT VERIFIED.**
+
 Run #16, REVIEW phase (attempt 4), 2026-10-17: **Build #16 (`063d391`, current HEAD,
 clean worktree) completed** (artifact `nostromo-firmware-16`, 35935147 B, 1372 files). It is
 the first build with the run #16 firmware change: `web_report.c` captures the reply body
@@ -232,6 +250,7 @@ flashing steps (§4.1).
 | R-09 (optional) | HA shows the tank level in % from the provisioned empty/full distances | Derived (G8, §5.11). **Not implemented**; only applies if M7a is done |
 | R-10 | Boots correctly; ≥ 10 valid distance readings over UART, all 10–60 cm, no reported communication errors | **VERIFICATION rev 3 (operator)**; reading per §4.2.1 (G24) |
 | R-11 | Join Wi-Fi `weefee`; POST readings to PHP files at `https://randoresto.ch/water` that store them in a database; web page shows the tank level with empty = 30 cm, full = 5 cm (provisional) | **Operator guidance 2026-10-17 (run #14)** |
+| R-12 | The ESP32's network hostname is `espwatertank` | **Operator guidance 2026-10-17 (run #18)** |
 
 ## Proposed acceptance criteria, pending operator confirmation
 
@@ -246,6 +265,7 @@ flashing steps (§4.1).
 | AC-7 (Stage 2) | A provisioned device appears in HA as "Water tank" with a distance entity in mm that updates at least every `WT_HA_PUBLISH_PERIOD_MS` + 1 s | V-13b, V-13c |
 | AC-8 (Stage 2) | Network faults (AP off, broker restart) recover without a reboot; AC-3 and AC-6 still hold with HA active | V-13e, V-13f, V-13g |
 | **AC-VS3** (operator-defined, not a proposal) | Verification spec rev 3, as quoted above | V-15 (with V-09b for the checker) |
+| AC-HOST (run #18) | The router's client list shows the board as `espwatertank` | V-18a, V-18b |
 
 ## Implementation traceability
 
@@ -266,6 +286,7 @@ flashing steps (§4.1).
 | R-09 | — (planned: DEVELOPMENT_PLAN.md M7a) | Not implemented |
 | R-11 | `components/wt_wifi/*` (shared STA, backoff 1→60 s), `components/web_report/*` (form POST over HTTPS + CA bundle, 60 s period, 15 s retry), `sdkconfig.defaults` (SSID/password, URL, API key), `main/main.c`; server: `web/water/*.php`, `.htaccess`; `test/host/test_web_payload.c` | Firmware CI-compiled (Build #15, `f3fc197`, includes all run #14 edits; Build #16, `063d391`, adds the run #16 reply parsing); PHP never executed (no PHP runtime in any phase); host test never run |
 | R-10 | Existing: report line (`main.c`, `level_report_uart.c`), range check (`a02yyuw_distance_in_range`), counters (`a02yyuw.c`). M8a (run #9): counter rebase in `a02yyuw.c`, `check_v15` in `test/bench/check_log.py` | Report path and M8a rebase CI-compiled (Build #12, `84dfcb1`). `check_v15` and its self-tests never run |
+| R-12 | `components/wt_wifi/wt_wifi.c` (`esp_netif_set_hostname` before `esp_wifi_start`), `main/Kconfig.projbuild` (`WT_WIFI_HOSTNAME`), `sdkconfig.defaults` (`CONFIG_WT_WIFI_HOSTNAME`, `CONFIG_LWIP_LOCAL_HOSTNAME`), README config table | CI-compiled (Build #17, `080af2e`); not flashed |
 
 ## Verification checks
 
@@ -304,6 +325,8 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-16f | R-11 (run #16) | Host unit test | `make -C test/host run` | `test_parse_reply` checks pass: `"ok":true` accepted with/without `id`/`rows`; `"ok":false`, HTML pages, empty/NULL bodies rejected | Host C compiler | NOT VERIFIED (never run) |
 | V-16g | R-11 (run #16) | Log + server | Upload the run #16 `web/water/`, flash a run #16 image, capture ≥ 3 min | `web: post ok: http 200, stored as row <id>, <n> rows in table`, about one per 60 s, `<id>` increasing; page chart header "· N readings received" grows by about 1 per minute; a 200 page that is not post.php's JSON gives `post rejected: http 200 but the reply is not from post.php` | Board, sensor, AP, server | NOT VERIFIED |
 | V-16h | Operator (run #16) | Browser | Open `index.php` at several levels, and with reduced motion enabled in the OS | Water surface is two drifting sine waves with no seam or jump at the loop point, no rotating ellipses; bubbles rise; stale/no data → grey water with frozen waves; reduced motion → no animation | Server, browser | NOT VERIFIED |
+| V-18a | R-12 (run #18) | Log | Flash `nostromo-firmware-17` (or later); capture from reset until Wi-Fi gets an IP | `wt_wifi` I line `starting ssid=weefee, hostname espwatertank`; no `hostname espwatertank rejected` W line; IP obtained. 1 Hz report lines unchanged | Board, AP | NOT VERIFIED |
+| V-18b | R-12 (run #18) | Router / LAN | After V-18a: check the router's DHCP client list; optionally `nslookup espwatertank` / `ping espwatertank` from a LAN host | Client list shows `espwatertank` with the IP from V-18a. Name resolution works only if the router publishes DHCP names; `espwatertank.local` is **not** expected to work (no mDNS) | Router admin access | NOT VERIFIED (operator action) |
 | V-13h | R-09 | HA UI + `mosquitto_sub` (only after M7a) | Provision `tank_empty_mm`/`tank_full_mm`, reboot; hold the target at the full and empty distances and at the midpoint | "Level" entity in %; ≈100 / ≈0 / ≈50 (±2 points), clamped outside the range; with the geometry removed, the entity disappears from HA (empty retained config); UART line unchanged | Broker, HA, target | NOT APPLICABLE (not implemented) |
 
 ## Bench constraints affecting verification
@@ -338,6 +361,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | AC-8 | NOT VERIFIED | As AC-7, plus AP/broker fault injection |
 
 | AC-WEB (run #14) | NOT VERIFIED | V-16b passed in CI (Builds #14, #15, #16) except warning scan/size. V-16a, V-16c–V-16h: no host test, server deployment or hardware run yet; tank limits 30/5 cm are provisional |
+| AC-HOST (run #18) | NOT VERIFIED | CI-compiled (Build #17). Needs a flash plus V-18a/V-18b on the operator's network |
 | **AC-VS3** | NOT VERIFIED | M8a firmware part CI-compiled (Build #12). Still needs V-09b (host Python) and V-15 on hardware with a 10–60 cm target (G25) |
 
 AC-1…AC-8 are still **proposals** (G6) until the operator confirms them. AC-VS3 is
@@ -364,6 +388,7 @@ operator-defined (verification spec rev 3).
 | 2026-10-17 | Platform UART verification #4 (Flash #2; the image is not named in the report, most likely Build #14) | Hardware, 12 sample lines, 4402 bytes | **FAILED**. Only `line_err equals 0` failed, with "Unparseable line_err=0)". The status, distance, `cks_err`, `uart_ovf` and `sync_skip` checks passed on 11–12 samples. The fault is in the log format (F-36), not in the sensor link | Evidence SHA-256 `74bddc02f2fbb5718b1a904b42cc7657ee95540ce3aa3d95bf8f081b51d91812`; 45 decode replacements (boot ROM noise). Fixed in source at run #14 attempt 7; compiled in Build #15, not reflashed yet |
 | 2026-10-17 | V-01, V-16b | Build #15 (`f3fc197`, first build with the F-36 lock-line rewording and the `web_report.c` once-per-outage W lines) | **CI job COMPLETED**. Compile, link and partition fit implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only; F-36 fix **not yet verified on hardware** | "Artifact nostromo-firmware-15 has been successfully uploaded! Final size is 35918416 bytes. Artifact ID is 12114311601"; zip SHA256 `b008855877b824998e6b0242bb04865a68f20e1a89f426657735f81633007f93`; 1372 files |
 | 2026-10-17 | V-01, V-16b | Build #16 (`063d391`, first build with the run #16 `web_payload_parse_reply()` and the `post ok … stored as row` log line) | **CI job COMPLETED**. Compile, link and partition fit implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only; not flashed. The run #16 PHP/page changes are not part of the firmware and are not covered by CI | "Artifact nostromo-firmware-16 has been successfully uploaded! Final size is 35935147 bytes. Artifact ID is 12115176256"; zip SHA256 `01887bed0c432860a944e3d2cfa5a041e81cdd8a182081c763b4075979124402`; 1372 files |
+| 2026-10-17 | V-01, V-16b | Build #17 (`080af2e`, first build with the run #18 hostname `espwatertank`) | **CI job COMPLETED**. Compile, link and partition fit implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only; not flashed, hostname not observed on any network | "Artifact nostromo-firmware-17 has been successfully uploaded! Final size is 35936529 bytes. Artifact ID is 12115899534"; zip SHA256 `38d60441f08a713bfb8e4bbc978f5d07e17b20fd39538b6c775348fe20a68514`; 1372 files |
 
 No other check has been executed. No build result exists for commits `184d5de`,
 `7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and
