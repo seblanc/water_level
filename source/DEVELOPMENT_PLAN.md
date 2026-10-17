@@ -5,7 +5,7 @@ Status markers:
 - `[x]` done and observable in this repo (for code this means **written**, not compiled or run)
 - `[ ]` not done
 
-Last updated: run #3, IMPLEMENTATION phase (attempt 4), 2026-10-17.
+Last updated: run #3, IMPLEMENTATION phase (attempt 5), 2026-10-17.
 
 ## Milestones
 
@@ -60,14 +60,19 @@ Last updated: run #3, IMPLEMENTATION phase (attempt 4), 2026-10-17.
 - [x] Recorded Build #3: **blocked** by the same `git push` 403 as Build #2 (F-17). Nothing was compiled, and no source files changed
 - [ ] Operator (same item as M4e, still open): fix CI write access to `seblanc/water_level`. Check in this order: (1) a fine-grained PAT needs `seblanc/water_level` in "Repository access" and "Contents: Read and write"; (2) a classic PAT needs the `repo` scope; (3) the token must not be expired or revoked; (4) branch protection on `main` must allow the push. Then re-trigger the build
 
+### M4g — Run #3 implementation (attempt 5; documentation only)
+- [x] Recorded Build #4: **blocked** at `git push`, but with a new error. The 403 is gone (M4e/M4f write access appears fixed). GitHub now refuses the push because the PAT has no `workflow` scope and the history contains `.github/workflows/nostromo-build.yml` (F-18, G15). Nothing was compiled, and no source files changed
+- [ ] Operator: give the CI token workflow rights. Classic PAT: tick the `workflow` scope. Fine-grained PAT: "Workflows: Read and write". Alternatively, push the current history once with a credential that has workflow rights. Then re-trigger the build
+
 ### M5 — Build and bench verification (needs a toolchain and hardware; operator or a bench-enabled phase)
 Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRIX.md:
 
 **Precondition:** commit the whole `source/` tree (platform/operator; agents have no git).
 Build #1 was blocked by the dirty worktree (F-15, G12). The platform has since committed
 the tree (`65c6ad9`, `3e2dc04`), and it is expected to commit this phase's changes as well.
-Builds #2 and #3 then failed at `git push` with HTTP 403 (F-17, G14). The CI push credentials must
-have write access to the repository before V-01 can run.
+Builds #2 and #3 then failed at `git push` with HTTP 403 (F-17, G14). Build #4 got past the
+403 but was rejected because the token has no `workflow` scope (F-18, G15). The CI token needs
+both write access and workflow rights before V-01 can run.
 
 0. [ ] V-04 wiring inspection **before power-up** (sensor TX → GPIO16; F-13)
 1. [ ] V-09 `make -C test/host run`, and V-09b `python3 test/bench/test_check_log.py`

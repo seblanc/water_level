@@ -9,6 +9,11 @@ there is no real evidence for any of them. Firmware source and host tests exist.
 has been compiled, flashed, run, or measured. The only analysis done is static review by
 reading the code (SYSTEM_ARCHITECTURE.md §7.2).
 
+Run #3, IMPLEMENTATION phase (attempt 5), 2026-10-17: GitHub Actions Build #4 was
+**blocked** at `git push` with a new error. The 403 is gone, but GitHub refused the push
+because the PAT lacks the `workflow` scope needed to create `.github/workflows/nostromo-build.yml`
+(F-18, G15). Nothing was compiled. Source files are unchanged in this phase.
+
 Run #3, IMPLEMENTATION phase (attempt 4), 2026-10-17: GitHub Actions Build #3 was
 **blocked** by the same HTTP 403 on `git push` (F-17, G14). The CI credentials were not
 changed after Build #2, so further builds will fail the same way until the operator fixes
@@ -76,7 +81,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | Check | Req | Method | Procedure | Pass criterion | Needs | Result |
 |-------|-----|--------|-----------|----------------|-------|--------|
-| V-01 | R-01 | Build (GitHub Actions) | Commit `source/`, then the CI build runs (equivalent to `idf.py set-target esp32 && idf.py build`) | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version (and so which F-12 branch, `driver` or `esp_driver_*`, was exercised) and the artifact list | Clean committed worktree + CI with IDF v5.x | NOT VERIFIED (Builds #1 and #2 blocked, see the results log) |
+| V-01 | R-01 | Build (GitHub Actions) | Commit `source/`, then the CI build runs (equivalent to `idf.py set-target esp32 && idf.py build`) | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version (and so which F-12 branch, `driver` or `esp_driver_*`, was exercised) and the artifact list | Clean committed worktree + CI with IDF v5.x | NOT VERIFIED (Builds #1–#4 blocked, see the results log) |
 | V-02 | R-02 | Bench | `idf.py -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 flash`, or from the CI `build/` artifacts: `python -m esptool --chip esp32 -p <port> write_flash @flash_args` | esptool prints "Hash of data verified" for each segment and the board resets into the app | Board + USB | NOT VERIFIED |
 | V-03 | R-03 | Bench / log (auto: `check_log.py --check v03`) | Sensor connected; `idf.py -p <port> monitor`, capture to a file | Banner shows `rx_gpio=16 tx_gpio=17 baud=9600`; within 2 s, `status=OK` lines appear with `ok=` increasing. On failure, record `rx_bytes`/`line_err` (README troubleshooting table) | Board + sensor | NOT VERIFIED |
 | V-03b | R-07 | Bench / log (auto: `--check v03b`) | Boot with the sensor **disconnected** | Banner printed; one `sensor data lost` warning; `status=NO_DATA distance_mm=-1 age_ms=-1 ok=0` lines at 1 Hz; no reboot | Board | NOT VERIFIED |
@@ -115,7 +120,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED | CI Build #1 was blocked (worktree not committed, F-15). Builds #2 and #3 were blocked (git push 403, F-17): the CI credentials need write access to `seblanc/water_level`. No compilation yet (V-01). No host compiler for V-09/V-09b |
+| AC-1 | NOT VERIFIED | CI Build #1 was blocked (worktree not committed, F-15). Builds #2 and #3 were blocked (git push 403, F-17). Build #4 was blocked because the PAT has no `workflow` scope (F-18, G15). No compilation yet (V-01). No host compiler for V-09/V-09b |
 | AC-2 | NOT VERIFIED | No hardware access (V-02) |
 | AC-3 | NOT VERIFIED | Needs board + sensor + log capture (V-03, V-05); pin direction G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Needs tape measure and target (V-06); tolerance is an assumption |
@@ -131,5 +136,6 @@ All six criteria are also still **proposals** (G6) until the operator confirms t
 | 2026-10-16 | V-01 | GitHub Actions Build #1 (commit "pending") | **BLOCKED**, not executed. The source was not compiled, so this is neither a pass nor a fail | Builder message: "Project Git worktree is dirty; commit changes before building" |
 | 2026-10-16 | V-01 | GitHub Actions Build #2 (commit "pending") | **BLOCKED**, not executed. Push to the CI repository was refused, so the source was not compiled. Neither a pass nor a fail | Builder message: "remote: Permission to seblanc/water_level.git denied to seblanc. ... The requested URL returned error: 403" |
 | 2026-10-17 | V-01 | GitHub Actions Build #3 (commit "pending") | **BLOCKED**, not executed. Same 403 on `git push` as Build #2, so the credentials were not changed between builds. Not compiled. Neither a pass nor a fail | Builder message: "remote: Permission to seblanc/water_level.git denied to seblanc. fatal: unable to access 'https://github.com/seblanc/water_level.git/': The requested URL returned error: 403" |
+| 2026-10-17 | V-01 | GitHub Actions Build #4 (commit "pending") | **BLOCKED**, not executed. The 403 is gone, but the remote rejected the ref update because the token has no `workflow` scope. Not compiled. Neither a pass nor a fail | Builder message: "! [remote rejected] HEAD -> main (refusing to allow a Personal Access Token to create or update workflow `.github/workflows/nostromo-build.yml` without `workflow` scope)" |
 
 No other check has been executed.
