@@ -9,6 +9,11 @@ there is no real evidence for any of them. Firmware source and host tests exist.
 has been compiled, flashed, run, or measured. The only analysis done is static review by
 reading the code (SYSTEM_ARCHITECTURE.md §7.2).
 
+Run #3, IMPLEMENTATION phase (attempt 4), 2026-10-17: GitHub Actions Build #3 was
+**blocked** by the same HTTP 403 on `git push` (F-17, G14). The CI credentials were not
+changed after Build #2, so further builds will fail the same way until the operator fixes
+access. Nothing was compiled. Source files are unchanged in this phase.
+
 Run #3, IMPLEMENTATION phase (attempt 3), 2026-10-16: GitHub Actions Build #2 was
 **blocked** when the platform's `git push` to `seblanc/water_level` returned HTTP 403
 (permission denied). That is a CI credential/repository-access problem (F-17, G14), not a
@@ -110,7 +115,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED | CI Build #1 was blocked (worktree not committed, F-15). Build #2 was blocked (git push 403, F-17): the CI credentials need write access to `seblanc/water_level`. No compilation yet (V-01). No host compiler for V-09/V-09b |
+| AC-1 | NOT VERIFIED | CI Build #1 was blocked (worktree not committed, F-15). Builds #2 and #3 were blocked (git push 403, F-17): the CI credentials need write access to `seblanc/water_level`. No compilation yet (V-01). No host compiler for V-09/V-09b |
 | AC-2 | NOT VERIFIED | No hardware access (V-02) |
 | AC-3 | NOT VERIFIED | Needs board + sensor + log capture (V-03, V-05); pin direction G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Needs tape measure and target (V-06); tolerance is an assumption |
@@ -125,5 +130,6 @@ All six criteria are also still **proposals** (G6) until the operator confirms t
 |------|-------|--------|---------|----------|
 | 2026-10-16 | V-01 | GitHub Actions Build #1 (commit "pending") | **BLOCKED**, not executed. The source was not compiled, so this is neither a pass nor a fail | Builder message: "Project Git worktree is dirty; commit changes before building" |
 | 2026-10-16 | V-01 | GitHub Actions Build #2 (commit "pending") | **BLOCKED**, not executed. Push to the CI repository was refused, so the source was not compiled. Neither a pass nor a fail | Builder message: "remote: Permission to seblanc/water_level.git denied to seblanc. ... The requested URL returned error: 403" |
+| 2026-10-17 | V-01 | GitHub Actions Build #3 (commit "pending") | **BLOCKED**, not executed. Same 403 on `git push` as Build #2, so the credentials were not changed between builds. Not compiled. Neither a pass nor a fail | Builder message: "remote: Permission to seblanc/water_level.git denied to seblanc. fatal: unable to access 'https://github.com/seblanc/water_level.git/': The requested URL returned error: 403" |
 
 No other check has been executed.
