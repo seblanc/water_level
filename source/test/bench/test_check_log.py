@@ -192,6 +192,69 @@ class V12Test(unittest.TestCase):
         self.assertEqual(res.verdict, cl.FAIL)
 
 
+HA_DISABLED = ["I (331) ha: disabled (no wifi_ssid/mqtt_uri configured)"]
+HA_ENABLED = [
+    "I (331) ha: enabled id=wt_a1b2c3 ssid=HomeNet broker=192.168.1.10:1883 user=wt period_ms=10000",
+    "I (402) phy_init: phy_version 4830,54550f7,Jun 20 2024,14:22:08",  # F-29
+    "I (450) wifi:mode : sta (24:0a:c4:a1:b2:c3)",  # no space after the tag: not an IDF log line
+    "I (1250) esp_netif_handlers: sta ip: 192.168.1.42, mask: 255.255.255.0, gw: 192.168.1.1",
+    "I (1251) ha: wifi connected ip=192.168.1.42",
+]
+
+
+def ha_run(n, ha_mid):
+    """ok_run(n) with HA lines interleaved between the reports (as the wt_ha task would)."""
+    lines = []
+    for i, rep in enumerate(ok_run(n)):
+        lines.append(rep)
+        if i == 2:
+            lines += ["I (%d) ha: mqtt connected" % (3400 + i),
+                      "I (%d) ha: discovery published, wt_ha stack free=1820 B" % (3410 + i)]
+        if i == n // 2:
+            lines += ha_mid(1330 + i * 1000 + 500)
+    return lines
+
+
+def wifi_drop(t):
+    return ["W (%d) ha: mqtt disconnected" % t,
+            "W (%d) ha: wifi disconnected reason=8, retry in 1 s" % (t + 1),
+            "I (%d) ha: wifi connected ip=192.168.1.42" % (t + 300)]
+
+
+class HaLinesTest(unittest.TestCase):
+    """Stage 2 'ha:' lines must not change the Stage 1 verdicts (F-29)."""
+
+    def test_disabled_variant(self):
+        log = cl.parse_log(BANNER + HA_DISABLED + ok_run(61))
+        self.assertEqual(len(log.main.reports), 61)
+        self.assertEqual(cl.check_v03(log, 16, 17).verdict, cl.PASS)
+        self.assertEqual(cl.check_v05(log, None).verdict, cl.PASS)
+        self.assertEqual(log.failures, [])
+
+    def test_enabled_variant(self):
+        log = cl.parse_log(BANNER + HA_ENABLED + ha_run(61, wifi_drop))
+        self.assertEqual(log.banners, 1)
+        self.assertEqual(len(log.main.reports), 61)  # ha/phy_init lines are not reports
+        self.assertEqual(cl.banner_value(log.main, "report_period_ms"), 1000)
+        self.assertEqual(cl.check_v03(log, 16, 17).verdict, cl.PASS)
+        self.assertEqual(cl.check_v05(log, None).verdict, cl.PASS)
+        self.assertEqual(log.failures, [])
+
+    def test_enabled_v12_one_hour(self):
+        res = cl.check_v12(cl.parse_log(BANNER + HA_ENABLED + ha_run(3601, wifi_drop)))
+        self.assertEqual(res.verdict, cl.PASS, res.details)
+
+    def test_enabled_reboot_still_fails_v12(self):
+        lines = BANNER + HA_ENABLED + ha_run(5, wifi_drop)
+        res = cl.check_v12(cl.parse_log(lines + BANNER + HA_ENABLED + ok_run(5)))
+        self.assertEqual(res.verdict, cl.FAIL)
+
+    def test_brownout_on_wifi_start_fails_v12(self):
+        lines = BANNER + HA_ENABLED[:2] + ["Brownout detector was triggered"] + ok_run(5)
+        res = cl.check_v12(cl.parse_log(lines))
+        self.assertEqual(res.verdict, cl.FAIL)
+
+
 class MainTest(unittest.TestCase):
     def test_exit_codes(self):
         import tempfile

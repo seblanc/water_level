@@ -63,9 +63,9 @@ rewrite them**; only apply the listed fixes.
 1. [x] `components/ha_mqtt/include/ha_payload.h` + `ha_payload.c`: pure-C builders (written; host test not run)
 2. [x] `test/host/test_ha_payload.c` + Makefile target (written; **never executed**, V-09)
 3. [x] `components/ha_mqtt/ha_config.c` + `ha_mqtt_priv.h` (written)
-4. [~] `components/ha_mqtt/ha_mqtt.c` + `include/ha_mqtt.h` (written). Remaining fix:
-   F-25 (advance the backoff only when `esp_timer_start_once` returns `ESP_OK`); add the
-   F-26 comment in the fail path
+4. [x] `components/ha_mqtt/ha_mqtt.c` + `include/ha_mqtt.h` (written). F-25 (backoff
+   advances only when `esp_timer_start_once` returns `ESP_OK`) and the F-26 comment were
+   applied in run #6
 
 **Steps 5, 6 and 7 go into one change** (F-22, F-30): any one of them alone is expected
 to break the build. Use the exact text in SYSTEM_ARCHITECTURE.md §5.10.2.
@@ -75,26 +75,30 @@ then 9–10. The point is to get Stage 2 into a CI build as early as possible: t
 in a row (run #4 impl, run #5 arch) ended as "failed" without a build. The F-25 fix is
 small and independent, and it can wait if the phase runs short.
 
-5. [ ] `components/ha_mqtt/CMakeLists.txt`: `ha_payload.c` always; `ha_config.c` and
+**Run #6 status (attempts 1–3):** steps 1–10 are written and statically reviewed. **None
+of them has been compiled yet**: the next CI build is the first one that includes Stage 2.
+
+5. [x] `components/ha_mqtt/CMakeLists.txt`: `ha_payload.c` always; `ha_config.c` and
    `ha_mqtt.c` only `if(CONFIG_WT_HA_ENABLE)`. `REQUIRES level_report`; `PRIV_REQUIRES
    esp_wifi esp_netif esp_event nvs_flash mqtt esp_timer esp_app_format` (F-23).
    `main/CMakeLists.txt`: add `ha_mqtt` to `REQUIRES`. `main.c`: `#if CONFIG_WT_HA_ENABLE`
    include + `(void)ha_mqtt_start();` between `level_report_init()` and the reporter
    `xTaskCreate`; update the two stale "Stage 1 / not used" comments
-6. [ ] `main/Kconfig.projbuild` submenu "Home Assistant": `WT_HA_ENABLE` (bool, default y);
+6. [x] `main/Kconfig.projbuild` submenu "Home Assistant": `WT_HA_ENABLE` (bool, default y);
    `depends on WT_HA_ENABLE`: `WT_WIFI_SSID`, `WT_WIFI_PASSWORD`, `WT_MQTT_BROKER_URI`,
    `WT_MQTT_USERNAME`, `WT_MQTT_PASSWORD` (string, default ""), `WT_HA_PUBLISH_PERIOD_MS`
    (int, 10000, range 1000 600000), `WT_HA_DISCOVERY_PREFIX` (string, "homeassistant").
    Help texts: credentials belong in NVS or a local `sdkconfig`, never in `sdkconfig.defaults`
-7. [ ] `sdkconfig.defaults`: `CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y`,
+7. [x] `sdkconfig.defaults`: `CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y`,
    `CONFIG_WT_HA_ENABLE=y`. **No credentials**
-8. [ ] `tools/nvs_config.example.csv` (header `key,type,encoding,value`; `wt_cfg,namespace,,`
+8. [x] `tools/nvs_config.example.csv` (header `key,type,encoding,value`; `wt_cfg,namespace,,`
    then the five `string` keys with placeholder values). `.gitignore`: `nvs_config.csv`,
    `nvs*.bin`, `test/host/test_ha_payload` (F-24). README section "Home Assistant":
    provisioning steps (§5.3), HA-side expectations (§5.4), security note, NVS-erase note (F-21)
-9. [ ] `test/bench/test_check_log.py`: a synthetic log with `ha:` lines (enabled and
+9. [x] `test/bench/test_check_log.py`: a synthetic log with `ha:` lines (enabled and
    disabled variants, plus a `phy_init` INFO line, F-29) and unchanged V-03/V-05/V-12 verdicts
-10. [ ] Self-review: every `CONFIG_WT_*` macro used in C exists in Kconfig with the same
+   (class `HaLinesTest`; written, **not run**, V-09b)
+10. [x] Self-review: every `CONFIG_WT_*` macro used in C exists in Kconfig with the same
     name and type; format specifiers vs. types (`%d` with `int` Kconfig ints, `PRIu32`);
     no `abort`/`esp_restart`/`ESP_ERROR_CHECK` in `components/ha_mqtt`
 
