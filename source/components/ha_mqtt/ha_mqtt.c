@@ -150,15 +150,22 @@ static void publisher_task(void *arg)
 
 /* ---- Wi-Fi reconnect (event loop and esp_timer task context) ---- */
 
-/* Arm the one-shot reconnect timer with the current delay, then double it (1 -> 60 s). */
+/*
+ * Arm the one-shot reconnect timer with the current delay, then double it (1 -> 60 s).
+ * Returns the delay in s, or 0 if no new retry was armed (one already pending, or the
+ * timer failed): the backoff only advances when the timer really starts (F-25).
+ */
 static uint32_t schedule_reconnect(void)
 {
     uint32_t delay_s = s_retry_delay_s;
-    s_retry_delay_s = (delay_s >= HA_RETRY_MAX_S / 2) ? HA_RETRY_MAX_S : delay_s * 2;
     esp_err_t err = esp_timer_start_once(s_retry_timer, (uint64_t)delay_s * 1000000ULL);
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        ESP_LOGE(TAG, "reconnect timer: %s", esp_err_to_name(err));
+    if (err != ESP_OK) {
+        if (err != ESP_ERR_INVALID_STATE) {
+            ESP_LOGE(TAG, "reconnect timer: %s", esp_err_to_name(err));
+        }
+        return 0;
     }
+    s_retry_delay_s = (delay_s >= HA_RETRY_MAX_S / 2) ? HA_RETRY_MAX_S : delay_s * 2;
     return delay_s;
 }
 
@@ -167,8 +174,12 @@ static void try_connect(void)
     esp_err_t err = esp_wifi_connect();
     if (err != ESP_OK) {
         uint32_t delay_s = schedule_reconnect();
-        ESP_LOGW(TAG, "wifi connect failed (%s), retry in %" PRIu32 " s", esp_err_to_name(err),
-                 delay_s);
+        if (delay_s > 0) {
+            ESP_LOGW(TAG, "wifi connect failed (%s), retry in %" PRIu32 " s",
+                     esp_err_to_name(err), delay_s);
+        } else {
+            ESP_LOGW(TAG, "wifi connect failed (%s), retry pending", esp_err_to_name(err));
+        }
     }
 }
 
@@ -185,9 +196,14 @@ static void on_net_event(void *arg, esp_event_base_t base, int32_t id, void *dat
         try_connect();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         const wifi_event_sta_disconnected_t *ev = data;
+        int reason = ev != NULL ? (int)ev->reason : -1;
         uint32_t delay_s = schedule_reconnect();
-        ESP_LOGW(TAG, "wifi disconnected reason=%d, retry in %" PRIu32 " s",
-                 ev != NULL ? (int)ev->reason : -1, delay_s);
+        if (delay_s > 0) {
+            ESP_LOGW(TAG, "wifi disconnected reason=%d, retry in %" PRIu32 " s", reason,
+                     delay_s);
+        } else {
+            ESP_LOGW(TAG, "wifi disconnected reason=%d, retry pending", reason);
+        }
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         const ip_event_got_ip_t *ev = data;
         s_retry_delay_s = HA_RETRY_MIN_S;
@@ -369,7 +385,9 @@ fail:
     /*
      * Nothing has been started at this point, so nothing can publish. The
      * queue (and the publisher task, if created) stay allocated but idle: a
-     * registered sink cannot be removed.
+     * registered sink cannot be removed. The Wi-Fi/IP event handler instances
+     * and the default STA netif also stay registered (F-26): after
+     * esp_wifi_deinit() no Wi-Fi events fire, and this path runs at most once.
      */
     if (s_client != NULL) {
         esp_mqtt_client_destroy(s_client);

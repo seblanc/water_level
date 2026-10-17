@@ -1,8 +1,10 @@
 /*
- * Water tank level firmware — Stage 1.
+ * Water tank level firmware — Stage 1 + optional Stage 2.
  *
  * Reads an A02YYUW ultrasonic sensor on UART2 (GPIO16/GPIO17 by default) and
  * prints the distance on the console once per report period (1 s default).
+ * With WT_HA_ENABLE and Wi-Fi/MQTT settings provisioned, readings are also
+ * published to Home Assistant over MQTT (components/ha_mqtt).
  */
 #include <inttypes.h>
 #include <stdlib.h>
@@ -20,6 +22,10 @@
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
+#ifdef CONFIG_WT_HA_ENABLE
+#include "ha_mqtt.h"
+#endif
+
 #ifdef CONFIG_WT_MEDIAN_FILTER
 #define WT_MEDIAN_WINDOW CONFIG_WT_MEDIAN_WINDOW
 #else
@@ -35,7 +41,7 @@ static const char *TAG = "wt";
 
 static void init_nvs(void)
 {
-    /* Not used in Stage 1; prepared for Stage 2 (Wi-Fi/MQTT settings). */
+    /* Holds the Stage 2 settings (namespace "wt_cfg"); also needed by the Wi-Fi driver. */
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -134,6 +140,12 @@ void app_main(void)
     };
     ESP_ERROR_CHECK(a02yyuw_init(&sensor_cfg));
     ESP_ERROR_CHECK(level_report_init());
+
+#ifdef CONFIG_WT_HA_ENABLE
+    /* Must run before the reporter task (sink registration rule). HA is optional:
+     * errors are already logged and the console stream continues without it. */
+    (void)ha_mqtt_start();
+#endif
 
     if (xTaskCreate(reporter_task, "wt_report", REPORT_TASK_STACK, NULL, REPORT_TASK_PRIO,
                     NULL) != pdPASS) {

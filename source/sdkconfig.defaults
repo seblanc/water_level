@@ -20,3 +20,10 @@ CONFIG_WT_SENSOR_TX_GPIO=17
 CONFIG_WT_REPORT_PERIOD_MS=1000
 CONFIG_WT_SENSOR_STALE_MS=1000
 # CONFIG_WT_MEDIAN_FILTER is not set
+
+# Stage 2: Wi-Fi + MQTT need more than the default 1 MB app partition (§5.8).
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# Home Assistant compiled in; it stays off at runtime until provisioned (§5.2).
+# No credentials here: use NVS (tools/nvs_config.example.csv) or a local sdkconfig.
+CONFIG_WT_HA_ENABLE=y

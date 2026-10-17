@@ -1,12 +1,15 @@
 # Water tank level — ESP32 + A02YYUW (ESP-IDF)
 
 Stage 1 firmware: reads a DFRobot A02YYUW waterproof ultrasonic sensor over UART and
-prints the distance on the USB console once per second. Stage 2 (Home Assistant) is
-planned but not implemented yet. See `SYSTEM_ARCHITECTURE.md` §5.
+prints the distance on the USB console once per second. Stage 2 publishes the reading to
+Home Assistant over MQTT (discovery), once Wi-Fi and broker settings are provisioned.
+See `SYSTEM_ARCHITECTURE.md` §5 and the "Home Assistant" section below.
 
-> **Status:** **compiled in CI only** (GitHub Actions Build #8, IDF v5.4.2, artifact
-> `nostromo-firmware-8`). It has **not been flashed or tested on hardware yet**, and the host
-> tests have not been run. See `VERIFICATION_MATRIX.md`.
+> **Status:** Stage 1 is **compiled in CI only** (GitHub Actions Build #8, IDF v5.4.2,
+> artifact `nostromo-firmware-8`). Stage 2 (`components/ha_mqtt`) has been added to the
+> build in run #6 and has **not been compiled yet**; the next CI build is its first.
+> Nothing has been flashed or tested on hardware, and the host tests have not been run.
+> See `VERIFICATION_MATRIX.md`.
 
 ## Wiring (default, configurable)
 
@@ -89,6 +92,63 @@ This sample shows the intended format. It was not captured from hardware.
 | `WT_REPORT_PERIOD_MS` | 1000 |
 | `WT_SENSOR_STALE_MS` | 1000 |
 | `WT_MEDIAN_FILTER` / `WT_MEDIAN_WINDOW` | off / 5 |
+| *Home Assistant* → `WT_HA_ENABLE` | on (runtime-gated, see below) |
+| `WT_WIFI_SSID` / `WT_WIFI_PASSWORD` / `WT_MQTT_BROKER_URI` / `WT_MQTT_USERNAME` / `WT_MQTT_PASSWORD` | empty (NVS values take precedence) |
+| `WT_HA_PUBLISH_PERIOD_MS` | 10000 |
+| `WT_HA_DISCOVERY_PREFIX` | `homeassistant` |
+
+## Home Assistant (Stage 2, MQTT discovery)
+
+Needs an MQTT broker reachable from the ESP32 (e.g. the HA Mosquitto add-on) with the HA
+MQTT integration enabled. This setup is assumed, not confirmed (gap G5).
+
+**Default behaviour:** without settings the firmware prints one extra line,
+`I (xxx) ha: disabled (no wifi_ssid/mqtt_uri configured)`, and otherwise behaves exactly
+like Stage 1. Wi-Fi is not started.
+
+### Provisioning (works with CI artifacts; settings survive app reflashes)
+
+1. `cp tools/nvs_config.example.csv nvs_config.csv` and fill in your values
+   (`nvs_config.csv` is git-ignored). Any key can be left out; the menuconfig value is used
+   instead.
+2. `python -m esp_idf_nvs_partition_gen generate nvs_config.csv nvs.bin 0x6000`
+   (pip package `esp-idf-nvs-partition-gen`, or
+   `$IDF_PATH/components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py`).
+3. `python -m esptool --chip esp32 -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 write_flash 0x9000 nvs.bin`
+
+0x9000/0x6000 is the IDF default `nvs` partition; confirm it in the build's partition
+table output (`idf.py partition-table`). Local builds can use `idf.py menuconfig` →
+*Water Tank Sensor → Home Assistant* instead; the values are then in the git-ignored
+`sdkconfig`. **Never put credentials into `sdkconfig.defaults`.**
+
+Stage 2 uses the larger single-app partition table (1.5 MB app). Flash a Stage 2 image
+together with its partition table (`idf.py flash` or `write_flash @flash_args`).
+
+### What Home Assistant shows
+
+The device appears as **Water tank** with two entities: *Distance* (mm) and a diagnostic
+*Status* (`OK` / `NO_DATA` / `OUT_OF_RANGE`). Distance becomes *unavailable* when the
+device is offline or the sensor has no data. Topics (`<id>` = `wt_` + last 3 MAC bytes):
+
+| Topic | Content |
+|-------|---------|
+| `watertank/<id>/state` | `{"distance_mm":1234,"status":"OK","age_ms":120,"ok":5310,"cks_err":2}`, at most every `WT_HA_PUBLISH_PERIOD_MS`, immediately on a NO_DATA transition |
+| `watertank/<id>/availability` | `online` / `offline` (retained, LWT) |
+| `watertank/<id>/sensor` | `online` / `offline` (retained, sensor has data) |
+| `homeassistant/sensor/<id>/{distance,status}/config` | Discovery (retained) |
+
+Console lines with HA configured: `ha: enabled id=… ssid=… broker=host:port user=…
+period_ms=…`, then `ha: wifi connected ip=…`, `ha: mqtt connected`, `ha: discovery
+published …`. Passwords are never logged. The 1 Hz `wt: distance_mm=…` lines are unchanged.
+
+### Notes
+- **Security:** credentials are stored in plain text in flash (no flash encryption) and
+  MQTT is unencrypted (`mqtt://`). Fine for a trusted home LAN only.
+- **NVS erase:** after an incompatible IDF upgrade or a corrupted NVS partition the
+  firmware erases NVS at boot. The settings are then gone, HA falls back to *disabled*,
+  and you must repeat the provisioning steps.
+- Wi-Fi TX peaks can sag the shared 3V3 rail. Watch for brownout resets or rising
+  `cks_err` after enabling HA.
 
 ## Host unit tests (parser and filter, no hardware)
 
@@ -121,6 +181,8 @@ too short for the check). The checker and its self-tests have not been run yet.
 main/                      app_main, banner, 1 Hz reporter task, Kconfig
 components/a02yyuw/        sensor driver (UART2 + RX task) and pure-C parser/filter
 components/level_report/   report dispatcher (level_report_add_sink); Stage 1 = console sink
-test/host/                 host unit tests for parser/filter
+components/ha_mqtt/        Stage 2: Wi-Fi + MQTT + HA discovery sink; pure-C payload builders
+tools/                     nvs_config.example.csv (HA provisioning template)
+test/host/                 host unit tests for parser/filter and HA payloads
 test/bench/                offline log checker for bench captures + its self-tests
 ```

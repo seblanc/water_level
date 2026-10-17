@@ -60,4 +60,73 @@ menu "Water Tank Sensor"
         range 3 15
         default 5
 
+    menu "Home Assistant"
+
+        config WT_HA_ENABLE
+            bool "Compile in Home Assistant (Wi-Fi + MQTT discovery)"
+            default y
+            help
+                Builds the ha_mqtt component. At boot it only starts Wi-Fi and MQTT
+                if a Wi-Fi SSID and a broker URI are configured (NVS namespace
+                "wt_cfg" first, then the values below). Otherwise it logs
+                "ha: disabled" and the firmware behaves like Stage 1.
+
+        config WT_WIFI_SSID
+            string "Wi-Fi SSID"
+            depends on WT_HA_ENABLE
+            default ""
+            help
+                Fallback when the NVS key wifi_ssid is absent. Credentials belong
+                in NVS (tools/nvs_config.example.csv) or a local, git-ignored
+                sdkconfig, never in sdkconfig.defaults.
+
+        config WT_WIFI_PASSWORD
+            string "Wi-Fi password"
+            depends on WT_HA_ENABLE
+            default ""
+            help
+                Fallback when the NVS key wifi_pass is absent. Empty = open network,
+                otherwise at least 8 characters (WPA2/WPA3). Never put it in
+                sdkconfig.defaults.
+
+        config WT_MQTT_BROKER_URI
+            string "MQTT broker URI"
+            depends on WT_HA_ENABLE
+            default ""
+            help
+                Fallback when the NVS key mqtt_uri is absent, e.g.
+                mqtt://192.168.1.10:1883. Empty disables Home Assistant at runtime.
+
+        config WT_MQTT_USERNAME
+            string "MQTT username"
+            depends on WT_HA_ENABLE
+            default ""
+            help
+                Fallback when the NVS key mqtt_user is absent. Empty = anonymous.
+
+        config WT_MQTT_PASSWORD
+            string "MQTT password"
+            depends on WT_HA_ENABLE
+            default ""
+            help
+                Fallback when the NVS key mqtt_pass is absent. Never put it in
+                sdkconfig.defaults.
+
+        config WT_HA_PUBLISH_PERIOD_MS
+            int "Minimum state publish interval (ms)"
+            depends on WT_HA_ENABLE
+            range 1000 600000
+            default 10000
+            help
+                The state is published at most this often, and additionally at
+                once when the sensor goes to or from NO_DATA. The console report
+                period is not affected.
+
+        config WT_HA_DISCOVERY_PREFIX
+            string "Home Assistant discovery prefix"
+            depends on WT_HA_ENABLE
+            default "homeassistant"
+
+    endmenu
+
 endmenu
