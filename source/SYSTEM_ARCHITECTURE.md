@@ -1,47 +1,26 @@
 # SYSTEM ARCHITECTURE — Water Tank Level (project 1a95ca931d72)
 
-Status history:
-- Run #1: ARCHITECTURE (attempt 1), then IMPLEMENTATION (attempt 2). Stage 1 source was written.
-- Run #2, ARCHITECTURE phase (attempt 2, 2026-10-16): this document was updated to match
-  the code. §7 (implementation status + static review) and §8 (telemetry contract) were added.
-- Run #2, IMPLEMENTATION phase (attempt 3, 2026-10-16): static-review fixes F-03, F-04 and F-05
-  were implemented. The offline bench log checker `test/bench/check_log.py` was added (§7.4).
-- Run #2, REVIEW phase (attempt 4, 2026-10-16): static re-review of all sources and tests.
-  F-12 (IDF-version-dependent driver requirement) was fixed. F-13 (output contention on
-  swapped wiring) is documented with a mitigation. Verification results are now
-  `NOT VERIFIED`.
-- Run #3, ARCHITECTURE phase (attempt 1, 2026-10-16): static re-read of the firmware sources,
-  CMake files, Kconfig and `sdkconfig.defaults`. No code defects found. Added the first
-  builder result: GitHub Actions **Build #1 was blocked** because the Git worktree is dirty.
-  All project files are untracked, so nothing was compiled (F-15, G12). Added the CI build
-  path and CI-artifact flashing to §4 (G13). F-16 covers bench evidence files hidden by
-  `.gitignore`.
-- Run #3, IMPLEMENTATION phase (attempt 2, 2026-10-16): Git status at phase start was
-  **clean**. Commit `65c6ad9` ("MOTHER run 3 architecture attempt 1: phase_complete")
-  contains the whole tree, so the platform commits at the end of each phase. F-15 should
-  therefore not block the next CI build, but no new builder result exists yet. Static
-  re-read found no defects. Implemented the `level_report` sink fan-out (F-08, M6
-  groundwork). The console output is unchanged (§3.3).
-- Run #3, IMPLEMENTATION phase (attempt 6, 2026-10-17): CI **Build #5 compiled and linked**
-  the firmware on `espressif/idf:v5.4.2` (`water_tank.bin`, 0x35210 bytes). The job then
-  failed in the workflow's packaging step on a git "dubious ownership" error (F-19, G16),
-  not on a compile error. G4/G13 resolved, and F-01/F-10/F-12 (≥ v5.3 branch) build-confirmed.
-- Run #3, IMPLEMENTATION phase (attempt 7, 2026-10-17): CI Build #6 (`b05cc7f`) gave the same
-  result as #5. Compile and link succeeded with the same image size, then packaging failed on
-  "dubious ownership" (F-19). The workflow file still lacks the `safe.directory` fix
-  (read-only check). No source changes.
-- Run #3, IMPLEMENTATION phase (attempt 8, 2026-10-17): CI Build #7 (`d11d329`) failed on F-19
-  for the third time. The workflow is still unchanged, and there are no source changes.
-- Run #3, REVIEW phase (attempt 9, 2026-10-17): the operator committed a workflow fix
-  (`a45bcc0`, `safe.directory` at workflow line 42). **CI Build #8 (`43e0382`) completed**
-  and uploaded artifact `nostromo-firmware-8` (1360 files, ID 12094526795). F-19/G16 are
-  resolved. Static re-review found no defects, so there are no source changes.
+Last updated: run #4, ARCHITECTURE phase (attempt 1), 2026-10-17.
 
-**Compiled in CI only (Builds #5–#8; #8 is the first full CI pass). Nothing has been flashed or tested on hardware.** No agent
-phase so far had a shell, a toolchain, or bench access. Hardware facts below either come from the project
-specs or are marked **[ASSUMPTION]** / **[DATASHEET-RECALL]**. The second marker means
-general knowledge of the part that has not been checked against a supplied document (no
-reference documents were provided).
+**Evidence state.** The Stage 1 firmware **has been compiled in CI** (GitHub Actions, `espressif/idf:v5.4.2`).
+Build #5 compiled and linked it, and Build #8 (`43e0382`) completed and uploaded artifact
+`nostromo-firmware-8`. **It has never been flashed, run, or measured on hardware**, and the
+host tests have never been executed. No agent phase has had a shell, a toolchain, or bench access. Hardware facts below
+either come from the project specs or are marked **[ASSUMPTION]** or **[DATASHEET-RECALL]**.
+The second marker means general knowledge of the part, not checked against a supplied
+document (no reference documents were provided).
+
+### Status history (condensed)
+
+| Run / phase | Outcome |
+|-------------|---------|
+| #1 arch + impl | Architecture and Stage 1 source written |
+| #2 arch / impl / review | Docs aligned with the code (§7, §8). Fixes F-03/F-04/F-05/F-12, F-13 documented. Offline log checker added (§7.4) |
+| #3 arch → impl (attempts 1–8) | CI integration. Build #1 blocked by a dirty worktree (F-15). #2/#3 blocked by a push 403 (F-17). #4 blocked by the missing `workflow` token scope (F-18). #5–#7 compiled and linked, then failed in packaging on git "dubious ownership" (F-19). `level_report` sink fan-out added (F-08) |
+| #3 review (attempt 9) | Operator workflow fix `a45bcc0`. **Build #8 completed**, artifact uploaded. No source defects found |
+| **#4 arch (this phase)** | No new builder result (Build #8 is still the latest). Read-only check of `../.github/workflows/nostromo-build.yml` settles the CI-artifact layout and the flashing procedure (§4.1, G13 closed). **Stage 2 (Home Assistant over MQTT) design worked out to implementable detail (§5)**, with runtime gating so the Stage 1 behaviour is unchanged when HA is not configured. Plan for the next implementation phase: DEVELOPMENT_PLAN.md M6a |
+
+Earlier per-attempt detail is preserved in git history (commits `65c6ad9` … `bacd2c8`).
 
 ---
 
@@ -49,13 +28,13 @@ reference documents were provided).
 
 | Stage | Goal | Source | State |
 |-------|------|--------|-------|
-| Stage 1 | Read an A02YYUW ultrasonic sensor over UART and print the distance on the UART console **once per second** | PURPOSE rev 1, TELEMETRY rev 1 | Source written, unverified |
-| Stage 2 | Send the level data to the user's Home Assistant | PURPOSE rev 1 ("Then we will implement…") | Design outline only (§5) |
+| Stage 1 | Read an A02YYUW ultrasonic sensor over UART and print the distance on the UART console **once per second** | PURPOSE rev 1, TELEMETRY rev 1 | Written; **CI-compiled** (Builds #5–#8); not run on hardware |
+| Stage 2 | Send the level data to the user's Home Assistant | PURPOSE rev 1 ("Then we will implement…") | **Design complete (§5)**; implementation planned (M6a). No code yet |
 
 ## 2. Hardware context
 
 ### 2.1 Target
-- "ESP32 dev board from AliExpress", ESP-IDF framework.
+- ESP32 dev board, ESP-IDF framework, chip target `esp32`.
 - Bench "Simple UART": a WCH CH340 USB bridge (VID `1a86`,
   `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0`) is used for both flashing and logs
   at 115200 baud. That matches the usual ESP32-DevKitC / "DevKit V1" clone, which has
@@ -97,30 +76,32 @@ GPIO with no level shifting. Range or stability may be somewhat lower at 3.3 V t
 **[ASSUMPTION — gap G1]** The spec says only "GPIO17 and GPIO16". The map above follows the
 ESP32 UART2 convention (RX2 = GPIO16, TX2 = GPIO17). Both pins are Kconfig options, so a
 reversed wiring can be fixed in `menuconfig` without code changes. Correct operation does
-not depend on GPIO17.
+not depend on GPIO17. If the wiring is swapped, GPIO17 drives against the sensor output
+(F-13). Inspect the wiring before power-up.
 
 GPIO16/17 are not strapping pins and are not flash pins on WROOM-32, so they are safe at
-boot.
+boot. Stage 2 adds no pins (Wi-Fi is on-chip).
 
 ## 3. Software architecture
 
 ### 3.1 Platform
-- ESP-IDF **v5.x**, target `esp32` **[ASSUMPTION — TOOLCHAIN spec is empty]**. The APIs
-  used are listed in §7.3 and are expected to be stable across v5.x (not verified by a
-  build). The driver-component split in v5.3 is handled in `components/a02yyuw/CMakeLists.txt`
-  (F-12). v6.x is untested.
-- FreeRTOS (bundled), single app image, default partition table, no OTA in Stage 1.
+- ESP-IDF **v5.4.2** in CI (G4 resolved for CI). The firmware needs v5.0 or later (§7.3).
+  The < v5.3 branch of the F-12 driver selection has never been built, and v6.x is untested.
+- FreeRTOS (bundled), single app image, no OTA.
+- Partition table: currently the IDF default "single factory app" (1 MB app). **Stage 2
+  changes it to "single factory app, large" (1.5 MB app)** because of the Wi-Fi/MQTT image
+  size (§5.8).
 
-### 3.2 Project layout (as implemented)
+### 3.2 Project layout (as implemented; Stage 2 additions marked `+`)
 
 ```
 source/
 ├── CMakeLists.txt                 # project(water_tank), PROJECT_VER 0.1.0
 ├── sdkconfig.defaults             # esp32, 4 MB flash, console UART0 @115200, INFO logs, WT_* defaults
 ├── main/
-│   ├── CMakeLists.txt             # REQUIRES a02yyuw level_report nvs_flash esp_app_format spi_flash
-│   ├── Kconfig.projbuild          # menu "Water Tank Sensor" (WT_* options)
-│   └── main.c                     # app_main, banner, NVS init, reporter task (fixed rate)
+│   ├── CMakeLists.txt             # REQUIRES a02yyuw level_report nvs_flash esp_app_format spi_flash (+ ha_mqtt)
+│   ├── Kconfig.projbuild          # menu "Water Tank Sensor" (WT_* options) (+ "Home Assistant" submenu)
+│   └── main.c                     # app_main, banner, NVS init, reporter task (fixed rate) (+ ha_mqtt_start)
 ├── components/
 │   ├── a02yyuw/                   # REQUIRES driver (< v5.3) | esp_driver_uart (+ PRIV esp_driver_gpio) (≥ v5.3); PRIV esp_timer
 │   │   ├── include/a02yyuw.h          # driver API (config, sample, stats)
@@ -129,21 +110,24 @@ source/
 │   │   ├── a02yyuw.c                  # UART install, event-driven RX task, latest sample
 │   │   ├── a02yyuw_parser.c
 │   │   └── a02yyuw_filter.c
-│   └── level_report/              # sink dispatcher; Stage 1 = console sink
-│       ├── include/level_report.h     # reading type, sink type, dispatcher API
-│       ├── level_report.c             # sink registry + fan-out, status strings
-│       ├── level_report_priv.h        # component-internal: console sink prototype
-│       └── level_report_uart.c        # console sink (§8 report line)
+│   ├── level_report/              # sink dispatcher; Stage 1 = console sink
+│   │   ├── include/level_report.h     # reading type, sink type, dispatcher API
+│   │   ├── level_report.c             # sink registry + fan-out, status strings
+│   │   ├── level_report_priv.h        # component-internal: console sink prototype
+│   │   └── level_report_uart.c        # console sink (§8 report line)
+│   └── ha_mqtt/                   # + Stage 2 (§5)
+│       ├── include/ha_mqtt.h          # + ha_mqtt_start()
+│       ├── ha_config.c                # + NVS → Kconfig fallback settings load
+│       ├── ha_payload.{h,c}           # + pure-C JSON/topic builders (host-testable)
+│       └── ha_mqtt.c                  # + Wi-Fi STA, esp-mqtt client, sink, publisher task
+├── tools/
+│   └── nvs_config.example.csv     # + NVS provisioning template, placeholders only (§5.3)
 └── test/
-    ├── host/                      # host unit tests (gcc/cc, no IDF)
-    │   ├── Makefile               # make -C test/host run
-    │   └── test_parser.c
-    └── bench/                     # offline log checker (Python 3 stdlib), reads capture files only
-        ├── check_log.py           # §8 parser + V-03/V-03b/V-05/V-10/V-11/V-12 criteria
-        └── test_check_log.py      # self-tests on synthetic logs
+    ├── host/                      # host unit tests (cc, no IDF): test_parser.c (+ test_ha_payload.c)
+    └── bench/                     # offline log checker (Python 3 stdlib): check_log.py, test_check_log.py
 ```
 
-### 3.3 Module responsibilities
+### 3.3 Module responsibilities (Stage 1, as implemented)
 
 **`a02yyuw_parser`** (pure C, no IDF headers, host-testable)
 - Fills a 4-byte window that always starts with `0xFF`. Non-`0xFF` bytes seen while the
@@ -165,10 +149,10 @@ source/
 - `a02yyuw_init()` validates the configuration before touching hardware. It rejects UART0
   and out-of-range ports, an RX pin that fails `GPIO_IS_VALID_GPIO`, a TX pin (unless -1)
   that fails `GPIO_IS_VALID_OUTPUT_GPIO`, ESP32 flash pins GPIO6–11, and RX == TX. It then
-  installs the UART driver (512 B RX ring buffer, no TX
-  buffer, 16-entry event queue) at 9600 8N1 with no flow control, sets the pins (TX = -1
-  leaves the pin unconfigured), enables the RX pull-up, and starts the RX task. On any
-  failure it deletes the driver and returns an error.
+  installs the UART driver (512 B RX ring buffer, no TX buffer, 16-entry event queue) at
+  9600 8N1 with no flow control, sets the pins (TX = -1 leaves the pin unconfigured),
+  enables the RX pull-up, and starts the RX task. On any failure it deletes the driver and
+  returns an error.
 - RX task (prio 5, 3 KB stack) blocks on the UART **event queue**:
   - `UART_DATA`: read in chunks of up to 64 B and feed the parser byte by byte. Each valid
     frame updates the filter and the latest sample.
@@ -177,27 +161,26 @@ source/
   - `UART_FRAME_ERR` / `UART_PARITY_ERR`: increment `line_errors`.
 - The latest sample and the stats are shared through a `portMUX` spinlock critical
   section. The sample is timestamped with `esp_timer_get_time()`.
-- The median filter is cleared if the gap since the previous frame exceeds `stale_ms`, so
-  values from before a dropout are not mixed with new ones.
+- The median filter is cleared if the gap since the previous frame exceeds `stale_ms`.
 - `a02yyuw_get_latest()` returns `true` only if a sample exists and is ≤ `stale_ms` old. It
   always fills `age_ms` (−1 if no frame was ever received) and sets `in_range`.
 
-**`level_report`** (sink dispatcher, run #3)
+**`level_report`** (sink dispatcher)
 - `level_report_init()` registers the console sink. Calling it twice returns
   `ESP_ERR_INVALID_STATE`.
 - `level_report_add_sink(level_sink_fn, ctx)` registers up to `LEVEL_REPORT_MAX_SINKS` (4)
   sinks. It returns `ESP_ERR_INVALID_ARG` for a NULL function and `ESP_ERR_NO_MEM` when
   full. It is not thread-safe and must be called during start-up, before the reporter task
-  publishes.
+  starts.
 - `level_report_publish(const level_reading_t *)` calls every sink in registration order
-  from the reporter task. Sinks must not block; a network sink queues the reading.
+  from the reporter task. Sinks must not block.
 - Console sink (`level_report_uart.c`): one `key=value` line through `ESP_LOGI` (tag
-  `wt`), byte-identical to the run #2 output. See §8.
+  `wt`). See §8.
 
 **`main.c`**
-- `app_main`: NVS init (erases and retries on a version or no-free-pages error; prepared
-  for Stage 2), boot banner, `a02yyuw_init`, `level_report_init`, reporter task
-  (prio 4, 4 KB stack). `app_main` then returns, which IDF allows.
+- `app_main`: NVS init (erases and retries on a version or no-free-pages error), boot
+  banner, `a02yyuw_init`, `level_report_init`, reporter task (prio 4, 4 KB stack).
+  `app_main` then returns, which IDF allows.
 - Reporter task: `xTaskDelayUntil`, fixed period `CONFIG_WT_REPORT_PERIOD_MS` with no drift.
   Each tick it builds a `level_reading_t`:
   - not fresh → `NO_DATA`, `distance_mm = -1`
@@ -205,20 +188,24 @@ source/
   - fresh but out of range → `OUT_OF_RANGE` (value still reported)
 
   A status *transition* logs exactly one warning (into NO_DATA) or info message (out of
-  NO_DATA).
+  NO_DATA). `prev_status` starts as `OK`, so a boot without a sensor logs the warning once
+  (F-06).
 
 ### 3.4 Data flow
 
 ```
-A02YYUW --9600 8N1--> GPIO16 / UART2 --ISR, 512 B ring--> event queue --> RX task
+A02YYUW --9600 8N1--> GPIO16 / UART2 --ISR, 512 B ring--> event queue --> RX task (prio 5)
                                                                            │ parser → median filter
                                                                            ▼
                                                     latest sample + stats (spinlock)
                                                                            │
-                                                 reporter task (1 Hz, xTaskDelayUntil)
+                                                 reporter task (prio 4, 1 Hz, xTaskDelayUntil)
                                                                            │
-                                                  level_report_publish ─┬─> UART0 console (Stage 1)
-                                                                        └─> HA / MQTT sink (Stage 2)
+                                                  level_report_publish ─┬─> console sink → UART0 (Stage 1)
+                                                                        └─> ha sink → depth-1 queue (Stage 2)
+                                                                                  │ xQueueOverwrite, never blocks
+                                                                                  ▼
+                                                                  ha publisher task (prio 3) → esp-mqtt → Wi-Fi → broker → HA
 ```
 
 ### 3.5 Timing budget
@@ -228,8 +215,12 @@ A02YYUW --9600 8N1--> GPIO16 / UART2 --ISR, 512 B ring--> event queue --> RX tas
   processed mode **[ASSUMPTION]**).
 - Worst-case NO_DATA detection after the sensor is lost is ≈ `stale_ms + report_period`,
   or ≈ 2 s with the defaults.
-- Console load is ~4–5 log lines/s at most (1 report line plus occasional warnings), well
-  within 115200 baud.
+- Console load is a few log lines/s at most, well within 115200 baud. Stage 2 adds Wi-Fi
+  and MQTT event lines, mainly at connect/reconnect (§5.6 limits the Wi-Fi driver's
+  verbosity).
+- Stage 2: the HA sink's cost inside the reporter task is one `xQueueOverwrite` (µs).
+  Network latency never reaches the reporter task, so the 1 Hz console schedule (V-05)
+  must hold with Wi-Fi active (V-13g).
 
 ### 3.6 Error handling
 
@@ -239,46 +230,213 @@ A02YYUW --9600 8N1--> GPIO16 / UART2 --ISR, 512 B ring--> event queue --> RX tas
 | Checksum failure | Counted (`cks_err`); the frame is never published; parser resyncs |
 | Distance < 30 or > 4500 mm | Reported with `status=OUT_OF_RANGE` |
 | UART FIFO / ring overflow | Warning, flush, parser reset, `uart_ovf` incremented |
-| UART framing / parity error | `line_errors` incremented, printed as `line_err=` (F-03) |
-| Invalid sensor UART/GPIO configuration | `a02yyuw_init` logs the reason and returns `ESP_ERR_INVALID_ARG` → `ESP_ERROR_CHECK` abort → reboot loop with the error visible on the console (F-05) |
+| UART framing / parity error | `line_errors` incremented, printed as `line_err=` |
+| Invalid sensor UART/GPIO configuration | `a02yyuw_init` logs the reason and returns `ESP_ERR_INVALID_ARG` → `ESP_ERROR_CHECK` abort → reboot loop with the error visible on the console |
 | Driver/task init failure | `ESP_ERROR_CHECK` / `abort()` → panic → reboot (logged) |
-| Task watchdog | IDF default TWDT; both tasks block in OS calls |
+| Task watchdog | IDF default TWDT; all tasks block in OS calls |
+| Stage 2: HA not configured | One `ha: disabled (...)` line at boot; Wi-Fi is never started; Stage 1 is unaffected (§5.2) |
+| Stage 2: Wi-Fi / broker down | Retried with backoff in the background; readings are dropped (no backlog); console output unaffected; **never** a reboot (§5.6) |
+| Stage 2: HA init failure (e.g. out of memory) | Logged as an error, HA stays off, Stage 1 keeps running. HA is optional, so it must not abort the firmware |
 
 ## 4. Mapping: programming, telemetry, interfaces, test constraints
 
 | Aspect | Spec / bench | Architectural decision |
 |--------|--------------|------------------------|
-| Build | Adapter `esp_idf`, target `esp32`, backend GitHub Actions (automatic). Workflow added in commit `c4a0c6d`. The workflow file cannot be seen from the agent's file tools (G13) | Native IDF project at `source/` (`CMakeLists.txt` + `main/` + `components/`). The CI build uses only committed files. `sdkconfig` is git-ignored, so CI builds from `sdkconfig.defaults`. **Precondition:** the worktree must be committed and clean (F-15/G12). Record the IDF version from the CI log (G4) |
-| Programming (CI artifact) | CI produces the binaries; flashing is done on the bench | Needs a full set of images: `bootloader/bootloader.bin` @0x1000, `partition_table/partition-table.bin` @0x8000, `water_tank.bin` @0x10000 (IDF defaults for esp32). The simplest path is `python -m esptool --chip esp32 -p <port> -b 460800 write_flash @flash_args`, run from the downloaded `build/` directory **[ASSUMPTION: the workflow uploads `build/` including `flash_args`]**. Otherwise `idf.py -p <port> flash` from a local build |
-| Programming | FLASHING rev 1: "Flash over USB". Bench: USB-Serial (CH340) at `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` | `idf.py -p <port> flash`. esptool enters download mode automatically via DTR/RTS. Fall back to `-b 115200` if the CH340 link is unreliable; hold BOOT on clones without auto-reset circuitry. Flash layout: IDF default single-app partition table, 4 MB |
-| Runtime telemetry | TELEMETRY rev 1: "UART logs". Bench: UART @115200 on the same port | UART0 console at 115200, `ESP_LOG` (INFO). Machine-parseable `key=value` report line at 1 Hz, tag `wt`. Contract in §8 |
-| Port sharing | Flash and log use one port | Flashing and monitoring cannot run at the same time. Close the monitor before flashing (`idf.py flash monitor` sequences them). Opening the port may reset the board through DTR/RTS, so expect a boot banner on connect |
+| Build | Adapter `esp_idf`, target `esp32`, backend GitHub Actions (automatic) | Native IDF project at `source/`. CI runs `idf.py -C source set-target esp32 build` in `espressif/idf:v5.4.2`. It builds **committed files only** and uses `sdkconfig.defaults`, because `sdkconfig` is git-ignored. As a result, **CI builds never contain Wi-Fi/MQTT credentials** (§5.3) |
+| Programming (CI artifact) | CI uploads `nostromo-firmware-<id>` | See §4.1. Build #8's artifact is the **Stage 1 baseline**. Retention is 30 days, so it should expire around 2026-11-16 **[ASSUMPTION: counted from the 2026-10-17 upload]** |
+| Programming (local) | FLASHING rev 1: "Flash over USB". Bench: USB-Serial (CH340) at `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` | `idf.py -p <port> flash`. esptool enters download mode automatically via DTR/RTS. Fall back to `-b 115200` if the CH340 link is unreliable. Hold BOOT on clones without auto-reset circuitry |
+| Runtime telemetry | TELEMETRY rev 1: "UART logs". Bench: UART @115200 on the same port | UART0 console at 115200, `ESP_LOG` (INFO). Machine-parseable `key=value` report line at 1 Hz, tag `wt`. Contract in §8. Stage 2 keeps this line unchanged; HA is an additional sink, not a replacement |
+| Port sharing | Flash and log use one port | Flashing and monitoring cannot run at the same time. Close the monitor before flashing (`idf.py flash monitor` sequences them). Opening the port may reset the board through DTR/RTS |
 | Sensor interface | PURPOSE: GPIO16/17, 3V3 | UART2 at 9600 8N1. Pins and port set in Kconfig `WT_SENSOR_*` |
-| Upstream interface | PURPOSE Stage 2: Home Assistant | `level_report` sink abstraction; MQTT + HA discovery recommended (§5) |
-| Test constraints | TEST_SETUP and ACCEPTANCE empty; bench lists no stimuli, instruments, or voltage | Verification is log observation plus manual physical checks (tape measure, target, unplugging a wire). Parser and filter are covered by host unit tests. See VERIFICATION_MATRIX.md |
-| Guardrails | GUARDRAILS rev 1 empty | Self-imposed: no use of strapping or flash pins; UART0 reserved for the console; sensor on 3V3 only (no 5 V logic into a GPIO); no secrets in the repo (Stage 2) |
+| Upstream interface | PURPOSE Stage 2: Home Assistant | MQTT 3.1.1 to a broker (e.g. the HA Mosquitto add-on) with HA MQTT Discovery (§5) |
+| Provisioning | None specified | Runtime settings in NVS (namespace `wt_cfg`), flashed from a local CSV. Kconfig strings are the fallback for local builds (§5.3) |
+| Test constraints | TEST_SETUP and ACCEPTANCE empty; bench lists no stimuli, instruments, or voltage | Verification is log observation plus manual physical checks. Parser, filter (and Stage 2 payload builders) are covered by host unit tests. Stage 2 checks also need a Wi-Fi AP, a broker and HA, none of which are on the bench (VERIFICATION_MATRIX.md) |
+| Guardrails | GUARDRAILS rev 1 empty | Self-imposed: no use of strapping or flash pins; UART0 reserved for the console; sensor on 3V3 only; **no secrets in the repo** (credentials only in NVS images or a local `sdkconfig`, both git-ignored); HA failures must never reset the device or stop the console stream |
 
-## 5. Stage 2 outlook — Home Assistant (design only)
+### 4.1 Flashing a CI artifact (from a read-only check of the workflow)
+The workflow copies the whole `source/build` directory to `artifacts/build`. It adds
+`source-commit.txt` (`git rev-parse HEAD`), `toolchain-version.txt` (`idf.py --version`) and
+`SHA256SUMS`, and then uploads `artifacts/`. Build #8 uploaded 1360 files, 32.7 MB. IDF
+writes `flash_args` into `build/` with paths relative to that directory, so:
 
-Recommended approach: **MQTT with Home Assistant MQTT Discovery** (`esp-mqtt` + `esp_wifi`).
-- Wi-Fi STA credentials and the broker URI/user/password come from Kconfig (local
-  `sdkconfig`, git-ignored) or NVS. They are never committed.
-- Publish a retained discovery config to `homeassistant/sensor/<device_id>/distance/config`
-  (`device_class: distance`, `unit_of_measurement: mm`, `state_class: measurement`), plus
-  an availability topic with LWT `offline` and birth `online`.
-- Publish state JSON (`distance_mm`, `status`, `age_ms`) to `watertank/<device_id>/state`
-  at a configurable interval (default suggestion: 10 s; the UART stream stays at 1 Hz).
-- Sink fan-out: `level_report_publish()` is already a dispatcher (run #3). The MQTT sink
-  registers with `level_report_add_sink()` from `app_main` before the reporter task starts.
-  It must never block the reporter task: it copies the reading into a queue of depth 1
-  (`xQueueOverwrite`) that a separate MQTT task consumes.
-- Later: tank geometry (`empty_mm`, `full_mm`) → `level_percent`, optional `volume_l`.
+```
+unzip nostromo-firmware-8.zip -d fw8 && cd fw8
+cat source-commit.txt                    # expect 43e03828b63949c8c75de83f00ffe9b5f43b76b1
+grep -v ' \./SHA256SUMS$' SHA256SUMS | sha256sum -c --quiet
+cd build
+python -m esptool --chip esp32 -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 \
+    -b 460800 --before default_reset --after hard_reset write_flash @flash_args
+```
 
-Alternatives:
-- ESPHome would replace this IDF codebase.
-- An HA REST/webhook via `esp_http_client` has no discovery and no availability tracking.
+- The `grep -v` is a precaution. The shell creates `SHA256SUMS` before `find` runs, so the
+  list may contain an entry for `SHA256SUMS` itself that can never match **[ASSUMPTION
+  from reading the workflow; not observed]**.
+- Expected layout (IDF defaults for esp32): bootloader @0x1000, partition table @0x8000,
+  app @0x10000. Stage 2 changes the partition table (§5.8), so a Stage 2 image must be
+  flashed **with** its own partition table. `write_flash @flash_args` does this.
+- `esptool` is not inside the artifact. Use any esptool ≥ 4 (`pip install esptool`) or the
+  one in a local IDF install.
 
-**Prerequisite (G5):** an MQTT broker reachable from the ESP32 (e.g. the HA Mosquitto add-on).
+## 5. Stage 2 — Home Assistant via MQTT (design, run #4)
+
+### 5.1 Choice
+**MQTT with Home Assistant MQTT Discovery**, using IDF's bundled `mqtt` (esp-mqtt) and
+`esp_wifi` components.
+- Discovery creates the entities in HA automatically, and the LWT gives availability
+  tracking. Both run on the HA Mosquitto add-on, the most common setup.
+- Rejected alternatives: ESPHome (it would replace this IDF codebase and its verified
+  build pipeline) and the HA REST/webhook API (no discovery, no availability, and a
+  long-lived HA token stored on the device).
+- **Gap G5 is still open.** The operator has not said whether a broker exists. The design
+  is runtime-gated (§5.2), so shipping it costs nothing if the operator chooses differently.
+
+### 5.2 Build and runtime gating
+- Kconfig `WT_HA_ENABLE` (bool, **default y**) controls whether the `ha_mqtt` code is
+  compiled in. It defaults to `y` because CI builds only the defaults: with `n`, the Stage 2
+  code would never be compiled by the only toolchain available.
+- Runtime gate: `ha_mqtt_start()` loads the settings (§5.3). If the Wi-Fi SSID **or** the
+  broker URI is empty, it logs `I (t) ha: disabled (no wifi_ssid/mqtt_uri configured)` and
+  returns `ESP_OK`. It does not initialise `esp_netif`, start Wi-Fi or create a task. A CI
+  artifact without provisioning therefore behaves like Stage 1 plus that one line.
+- With `WT_HA_ENABLE=n`, `main.c` compiles the call out (`#if CONFIG_WT_HA_ENABLE`), so the
+  binary contains Stage 1 code only.
+
+### 5.3 Configuration and provisioning (no secrets in the repo)
+
+| Key (NVS `wt_cfg`) | Type | Kconfig fallback | Default | Meaning |
+|--------------------|------|------------------|---------|---------|
+| `wifi_ssid` | string ≤ 32 | `WT_WIFI_SSID` | "" | Wi-Fi STA SSID |
+| `wifi_pass` | string ≤ 64 | `WT_WIFI_PASSWORD` | "" | WPA2/WPA3 PSK ("" = open network) |
+| `mqtt_uri` | string ≤ 128 | `WT_MQTT_BROKER_URI` | "" | e.g. `mqtt://192.168.1.10:1883` |
+| `mqtt_user` | string ≤ 64 | `WT_MQTT_USERNAME` | "" | Broker user (HA add-on: a HA user) |
+| `mqtt_pass` | string ≤ 64 | `WT_MQTT_PASSWORD` | "" | Broker password |
+| — | int | `WT_HA_PUBLISH_PERIOD_MS` | 10000 (range 1000–600000) | Minimum state publish interval |
+| — | string | `WT_HA_DISCOVERY_PREFIX` | `homeassistant` | HA discovery prefix |
+
+- Precedence: a key present in NVS wins, otherwise the Kconfig value is used. Each key is
+  resolved on its own.
+- CI artifacts: the operator provisions NVS once, then reflashes app images as often as
+  needed. NVS survives `write_flash @flash_args`, since that only writes the bootloader,
+  partition table and app.
+  1. Copy `tools/nvs_config.example.csv` to a git-ignored `nvs_config.csv` and fill it in.
+  2. `python -m esp_idf_nvs_partition_gen generate nvs_config.csv nvs.bin 0x6000`
+     (pip package `esp-idf-nvs-partition-gen`, or `$IDF_PATH/components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py`).
+  3. `python -m esptool --chip esp32 -p <port> write_flash 0x9000 nvs.bin`.
+
+  The offset and size match the IDF default `nvs` partition (0x9000, 0x6000). Both
+  single-app tables keep that location **[ASSUMPTION from IDF defaults; confirm in
+  `build/partition_table` output or `idf.py partition-table`]**.
+- Local builds: `idf.py menuconfig` → "Water Tank Sensor → Home Assistant". The values live
+  in `sdkconfig`, which is git-ignored.
+- `.gitignore` additions: `nvs_config.csv`, `nvs*.bin`.
+- Security limitation: without flash encryption, credentials sit in flash in plain text.
+  This is acceptable for a home device on a trusted LAN, and it is documented, not
+  mitigated. The log never prints passwords: the banner prints the SSID, URI host and user
+  only.
+- Note: `init_nvs()` erases NVS on `ESP_ERR_NVS_NEW_VERSION_FOUND` / `NO_FREE_PAGES`, which
+  would wipe provisioned credentials. That is the IDF-recommended behaviour, and it only
+  happens after an incompatible IDF upgrade or a corrupted partition. In that case the
+  device falls back to "HA disabled". Documented in the README.
+
+### 5.4 MQTT topics and payloads
+
+`<id>` = `wt_` + the last 3 bytes of the Wi-Fi STA MAC in lowercase hex (e.g. `wt_a1b2c3`),
+from `esp_read_mac(..., ESP_MAC_WIFI_STA)`.
+
+| Topic | Retained | QoS | Payload |
+|-------|----------|-----|---------|
+| `watertank/<id>/availability` | yes | 1 | `online` (birth, published on connect) / `offline` (LWT, and on clean stop) |
+| `watertank/<id>/sensor` | yes | 1 | `online` when the last reading was `OK` or `OUT_OF_RANGE`, `offline` when `NO_DATA` |
+| `watertank/<id>/state` | no | 0 | `{"distance_mm":1234,"status":"OK","age_ms":120,"ok":5310,"cks_err":2}` |
+| `<prefix>/sensor/<id>/distance/config` | yes | 1 | Discovery: distance entity |
+| `<prefix>/sensor/<id>/status/config` | yes | 1 | Discovery: status entity (diagnostic) |
+
+Distance discovery payload (built by `ha_payload.c`; abbreviated keys are avoided for
+readability; `object_id` is deliberately omitted because recent HA releases are
+deprecating it **[ASSUMPTION]**, and HA derives the entity ID from the device and entity
+names):
+```json
+{"name":"Distance","unique_id":"<id>_distance",
+ "state_topic":"watertank/<id>/state","value_template":"{{ value_json.distance_mm }}",
+ "device_class":"distance","unit_of_measurement":"mm","state_class":"measurement",
+ "availability":[{"topic":"watertank/<id>/availability"},{"topic":"watertank/<id>/sensor"}],
+ "availability_mode":"all",
+ "device":{"identifiers":["<id>"],"name":"Water tank","model":"ESP32 + A02YYUW",
+           "manufacturer":"NOSTROMO","sw_version":"<app version>"}}
+```
+- The status entity uses the same `device`, `value_template: "{{ value_json.status }}"`,
+  `entity_category: "diagnostic"`, and availability = the device topic only.
+- With `availability_mode: all`, the distance entity shows **unavailable** whenever the
+  device is offline **or** the sensor reports `NO_DATA`. HA never sees `-1` as a distance.
+  The state payload still carries `distance_mm:-1` on `NO_DATA`, but the template is not
+  shown while the entity is unavailable.
+- Discovery and availability are (re)published on **every** `MQTT_EVENT_CONNECTED`, which
+  covers broker restarts and HA restarts with retained topics.
+- Later (G8): `level_percent` / `volume_l` from Kconfig tank geometry, as extra fields in
+  the state JSON plus extra discovery entities. This is backward compatible because fields
+  are only appended.
+
+### 5.5 Tasks and data path
+- **HA sink** (registered with `level_report_add_sink()` in `ha_mqtt_start()`, before the
+  reporter task is created): `xQueueOverwrite(q, r)` on a depth-1 queue of
+  `level_reading_t`, and nothing else.
+- **Publisher task `wt_ha`** (prio 3, i.e. below reporter (4) and RX (5); 4096 B stack
+  **[ASSUMPTION; check the high-water mark in V-13]**) loops on `xQueueReceive(q,
+  portMAX_DELAY)`, so it wakes once per report period. It publishes when MQTT is connected
+  **and** either (a) `now - last_pub ≥ WT_HA_PUBLISH_PERIOD_MS`, or (b) the
+  availability-relevant status changed (`OK/OUT_OF_RANGE` ↔ `NO_DATA`). In case (b) it
+  publishes the `sensor` topic first, then the state. While disconnected, readings are
+  dropped. There is no backlog, because only the newest value matters.
+- esp-mqtt runs its own task (default prio 5, `CONFIG_MQTT_TASK_STACK_SIZE` default 6144)
+  and has outbox handling. `esp_mqtt_client_publish()` is called only from `wt_ha`.
+  Connection state is a `volatile bool`/event-group bit set in the MQTT event handler.
+- Start-up order in `app_main`: `init_nvs` → banner → `a02yyuw_init` → `level_report_init`
+  → `ha_mqtt_start` (registers the sink; if configured, it starts netif, the event loop,
+  Wi-Fi, the MQTT client and `wt_ha`) → reporter task. This order respects the
+  `level_report_add_sink` rule (no publishing before registration completes).
+- `esp_netif_init()` and `esp_event_loop_create_default()` are called inside
+  `ha_mqtt_start()`, and only when configured. Nothing else in the firmware uses them.
+
+### 5.6 Connectivity behaviour
+- Wi-Fi STA, `WIFI_AUTH_WPA2_PSK` minimum threshold (`WIFI_AUTH_OPEN` if the password is
+  empty), power save left at the IDF default (`WIFI_PS_MIN_MODEM`).
+- On `WIFI_EVENT_STA_DISCONNECTED`: reconnect after a delay of 1 s, 2 s, 4 s … capped at
+  60 s, reset on `IP_EVENT_STA_GOT_IP`. The delay runs in an `esp_timer` one-shot, not in
+  the event handler. The MQTT client is started once after the first IP and relies on its
+  own reconnect (`reconnect_timeout_ms` 10 s) afterwards.
+- `esp_log_level_set("wifi", ESP_LOG_WARN)` keeps the console mostly free of Wi-Fi driver
+  chatter. The `ha` tag logs one line per state change: `wifi connected ip=…`,
+  `wifi disconnected reason=<n>, retry in <s> s`, `mqtt connected`, `mqtt disconnected`.
+- No failure in this path calls `abort()` or `esp_restart()`. The device keeps measuring and
+  printing on UART regardless of network state (R-07 spirit, §3.6).
+
+### 5.7 Banner addition (appended line, §8 compatible)
+```
+I (t) ha: enabled id=<id> ssid=<ssid> broker=<host:port> user=<user|-> period_ms=<n>
+I (t) ha: disabled (no wifi_ssid/mqtt_uri configured)
+```
+The `ha:` tag cannot match the report-line rule `\bwt: distance_mm=`, so `check_log.py`
+is unaffected (to be confirmed by V-09b with an added synthetic case).
+
+### 5.8 Resource budget (estimates, to be replaced by CI numbers)
+
+| Item | Stage 1 (measured, Build #5) | Stage 2 (estimate) |
+|------|------------------------------|--------------------|
+| App image | 0x35210 = 217 KB | ~800–950 KB **[ASSUMPTION: typical IDF 5.x Wi-Fi + esp-mqtt app]** |
+| App partition | 1 MB (single app) | **1.5 MB** (`CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y`), leaving ≥ 35 % headroom for TLS later |
+| Heap | small | +~60–90 KB for Wi-Fi/lwIP/MQTT **[ASSUMPTION]**; ESP32 has ~300 KB of free DRAM at boot |
+| Power on 3V3 | ESP32 idle + sensor ≤ 8 mA | Wi-Fi TX peaks ~250–350 mA. These may sag the board LDO and the shared sensor supply, so watch for brownout resets (V-12) and higher `cks_err` (V-10) with Wi-Fi active |
+
+The partition-table change also applies to Stage 1 functionality. It costs nothing, but
+changes the flash layout, so Stage 2 images must be flashed with their partition table
+(§4.1).
+
+### 5.9 Testability
+- `ha_payload.c` (topic/JSON builders: `snprintf` into caller buffers, returns length or
+  -1 on truncation) has no IDF dependencies, so `test/host/test_ha_payload.c` runs with the
+  existing `Makefile`.
+- The rest can only be verified with a Wi-Fi AP, a broker and HA. The bench lists none of
+  these, so the operator must perform V-13a…g.
 
 ## 6. Assumptions and gaps
 
@@ -287,68 +445,74 @@ Alternatives:
 | G1 | Which of GPIO16/17 is sensor TX vs RX | Sensor TX → GPIO16 | `ok=0`, NO_DATA; output contention on GPIO17 (F-13) | Check the wiring first; diagnose with TX = -1; swap in menuconfig or rewire; V-03 detects it |
 | G2 | Module type (WROOM vs WROVER) | WROOM-32, no PSRAM | GPIO16/17 unusable | Read the module can marking; move pins to e.g. GPIO25/26 |
 | G3 | No sensor datasheet supplied | SEN0311 protocol from recall (§2.2) | Parser constants wrong | Operator supplies the vendor doc; V-03/V-06 confirm on hardware |
-| G4 | IDF version unspecified | v5.x (v5.1–v5.3) | API/component differences | **Resolved for CI (Build #5): IDF v5.4.2** (`espressif/idf:v5.4.2`, `idf5.4_py3.12_env`). A local bench build may use another version; the banner prints it |
-| G5 | HA setup (broker? ESPHome?) | MQTT + discovery | Stage 2 design only | Ask the operator before Stage 2 |
-| G6 | Acceptance criteria empty | Derived criteria (VERIFICATION_MATRIX.md) | Wrong pass/fail bar | Operator confirms R-/V- items |
-| G7 | Sensor performance at 3.3 V | Adequate | Reduced range | V-08 at real tank depth. If 5 V is needed, first check the sensor TX logic level |
-| G8 | Tank geometry unknown | Raw distance only | None in Stage 1 | Needed for Stage 2 `level_percent` |
+| G4 | IDF version | **Resolved for CI: v5.4.2.** A local bench build may differ; the banner prints it | < v5.3 branch of F-12 unbuilt | — |
+| G5 | HA setup: broker present? HA version? ESPHome preference? | Mosquitto add-on (or any MQTT 3.1.1 broker) reachable on the LAN, plain `mqtt://` on 1883, user/password auth | Stage 2 code unused until configured; if no broker can be installed, a different sink is needed | Operator confirms before or during M6 verification. The design is runtime-gated, so no harm until then |
+| G6 | Acceptance criteria empty | Derived criteria (VERIFICATION_MATRIX.md) | Wrong pass/fail bar | Operator confirms AC-1…AC-8 |
+| G7 | Sensor performance at 3.3 V | Adequate | Reduced range | V-08 at real tank depth |
+| G8 | Tank geometry unknown | Raw distance only | No `level_percent` in HA | Operator supplies empty/full distances |
 | G9 | Whether the sensor RX wire is connected | Works either way | None | — |
-| G10 | Board's USB bridge reset behaviour (auto-reset circuit present?) | Present (typical CH340 DevKit clone) | Manual BOOT/EN needed to flash | V-02 observation |
-| G11 | `CONFIG_LOG_COLORS` default depends on IDF version/config | Disabled in `sdkconfig.defaults` (F-04, done) | Only if an existing `sdkconfig` predates the change. `check_log.py` strips ANSI codes anyway | Delete `sdkconfig` or run `idf.py fullclean` to re-apply defaults |
-| G12 | Who commits the worktree. Agent phases have file tools only, with no git | The platform commits at phase end (observed: `65c6ad9`, clean status at the start of run #3 impl.) | V-01 stays blocked ("worktree is dirty") | If a build is blocked again, commit all files under `source/`, then re-trigger the CI build |
-| G13 | CI workflow contents (IDF image/version, artifacts kept) | **Resolved (read-only inspection of `../.github/workflows/nostromo-build.yml`)**: container `espressif/idf:v5.4.2`; `idf.py -C source set-target "$TARGET" build`; packaging copies all of `source/build` to `artifacts/build`, adds `source-commit.txt`, `toolchain-version.txt`, `SHA256SUMS`, and uploads `nostromo-firmware-<build id>` (30-day retention) | — | Flashing from artifacts (§4) stays valid once packaging works (G16) |
-| G16 | CI packaging fails after a successful build (Build #5): `git rev-parse HEAD` → "detected dubious ownership in repository at '/__w/water_level/water_level'" | The workspace is checked out by the runner user, and the `espressif/idf` container runs as root, so git ≥ 2.35.2 refuses the repo. `actions/checkout` adds `safe.directory` only to a temporary HOME used during checkout, not to the later `run:` steps | V-01 cannot finish, and no firmware artifact is uploaded, however correct the source is | **Resolved (Build #8, commit `43e0382`)**: the operator's workflow commit `a45bcc0` adds `git config --global --add safe.directory "$GITHUB_WORKSPACE"` (workflow line 42, read-only check). Build #8 then completed and uploaded `nostromo-firmware-8` |
-| G14 | CI push credentials and repository access. Build #2: "Permission to seblanc/water_level.git denied to seblanc", HTTP 403 | The configured token is valid (it authenticates as `seblanc`) but lacks write scope, e.g. a read-only or fine-grained PAT without "Contents: write", or one restricted to other repositories | V-01 cannot run, however correct the source is | Operator: grant the CI token write access to `seblanc/water_level` (or fix the remote URL), then re-trigger the build. Agents cannot fix this from `source/`. **Build #4: the 403 is gone** (the remote now evaluated the ref update), so write access appears fixed. See G15 |
-| G15 | CI token scope for workflow files. Build #4: "refusing to allow a Personal Access Token to create or update workflow `.github/workflows/nostromo-build.yml` without `workflow` scope" | The pushed history contains the platform commit `c4a0c6d`, which adds the workflow file (project root, outside `source/`), and the remote does not have it yet | V-01 cannot run until the remote accepts that commit | Operator, one of: (a) classic PAT: add the `workflow` scope; (b) fine-grained PAT: add the "Workflows: Read and write" permission; (c) push the history once with a credential that has workflow rights (e.g. SSH key or `gh auth` with `workflow` scope). After that, pushes that don't modify the workflow file no longer need the scope. Then re-trigger the build. Agents must not edit or delete the workflow file (platform infrastructure) |
+| G10 | Board auto-reset circuit present? | Present (typical CH340 DevKit clone) | Manual BOOT/EN needed to flash | V-02 observation |
+| G11 | `CONFIG_LOG_COLORS` with an old local `sdkconfig` | Disabled in `sdkconfig.defaults` | Only for a stale local `sdkconfig`; `check_log.py` strips ANSI anyway | `idf.py fullclean` / delete `sdkconfig` |
+| G12 | Who commits the worktree | The platform commits at phase end (observed every phase since `65c6ad9`) | Build blocked ("worktree is dirty") | If it recurs, commit `source/` and re-trigger |
+| G13 | CI workflow contents | **Resolved** (read-only): `espressif/idf:v5.4.2`; whole `source/build` uploaded with `source-commit.txt`, `toolchain-version.txt`, `SHA256SUMS`; 30-day retention | — | §4.1 |
+| G14–G16 | CI push 403, `workflow` scope, git "dubious ownership" | **All resolved** by operator actions; Build #8 passed end to end | — | — |
+| G17 | Wi-Fi + sensor on one 3V3 rail (new, Stage 2) | Board LDO copes with Wi-Fi TX peaks | Brownout resets, noisy sensor | V-12/V-10 with HA enabled; add bulk capacitance (e.g. 100 µF near sensor VCC) or power the sensor from 5 V **only after** checking its TX logic level |
+| G18 | 2.4 GHz coverage at the tank (new) | Adequate RSSI | Frequent reconnects, gaps in HA | `ha` log lines show disconnect reasons. Optional RSSI field later |
+| G19 | Bundled `mqtt` component in future IDF versions (new) | Present in v5.4.2 | Build break on IDF ≥ 6 if it is moved to the component registry **[ASSUMPTION]** | CI pins v5.4.2; revisit on an IDF upgrade |
 
 ## 7. Implementation status and static review
 
 ### 7.1 Differences from the run #1 plan
 | Planned | Implemented | Assessment |
 |---------|-------------|------------|
-| RX task polls `uart_read_bytes` with a 100 ms timeout | RX task driven by the UART event queue, chunked reads | Better: it also handles overflow and line-error events |
-| Latest sample behind a mutex | `portMUX` spinlock critical section | Fine: the critical sections are short struct copies |
-| Report line `distance_mm status age_ms ok cks_err` | Adds `sync_skip` and `uart_ovf` | Superset, OK |
+| RX task polls `uart_read_bytes` with a 100 ms timeout | Event-queue RX task, chunked reads | Better: handles overflow and line errors too |
+| Latest sample behind a mutex | `portMUX` spinlock | Fine: short struct copies |
+| Report line `distance_mm status age_ms ok cks_err` | Adds `sync_skip uart_ovf rx_bytes line_err` | Superset, OK |
 | Median filter "over last ~10 frames" | Kconfig window 3–15, default 5, off by default | OK |
-| — | Median filter reset after a data gap > `stale_ms` | Added |
-| — | `a02yyuw_filter` split into its own pure-C module with host tests | Added |
+| — | Median reset after a data gap; filter split into its own pure-C module | Added |
 
-### 7.2 Static review findings (from reading the code only, no compiler)
-Nothing below has been confirmed by a build. These are risks or improvements for the next
-implementation phase.
+### 7.2 Findings
 
-| ID | Finding | Severity | Proposed action |
-|----|---------|----------|-----------------|
-| F-01 | Code has never been compiled. Include/`REQUIRES` sets look consistent with IDF v5.x (`esp_app_desc.h`→`esp_app_format`, `esp_flash.h`→`spi_flash`, `driver/uart.h`→`driver` or `esp_driver_uart` (F-12), `esp_timer`) | High (unknown) | **Build-confirmed on IDF v5.4.2 (Build #5)**: all project objects compiled and linked |
-| F-02 | Host test vectors checked by hand: checksums of `F_1953`, `F_1023`, `F_65280`, `F_766` are arithmetically correct | Info | V-09 still has to be executed |
-| F-03 | `bytes_rx` and `line_errors` are collected but never printed. They are the quickest way to tell "nothing arrives" (wiring/G1) from "bytes arrive but no frames" (baud, wrong pin, noise) | Medium (diagnosability) | **Done (run #2 impl.)**: `rx_bytes=` and `line_err=` appended to the report line |
-| F-04 | `CONFIG_LOG_COLORS` is not set in `sdkconfig.defaults` | Low | **Done**: `# CONFIG_LOG_COLORS is not set` |
-| F-05 | Kconfig `WT_SENSOR_RX_GPIO` range 0–39 allows flash pins 6–11 and non-existent GPIOs (20, 24, 28–31). Invalid pins fail in `uart_set_pin` and abort; flash pins would hang the chip | Low | **Done**: validated in `a02yyuw_init` (§3.3), Kconfig help updated |
-| F-06 | `prev_status` starts as `OK`, so a board booting without a sensor logs the "data lost" warning at the first tick (~1 s) | Info (intended) | None. Required by V-03b |
-| F-07 | `uart_set_pin` already enables the RX pull-up in IDF v5; the extra `gpio_pullup_en` is redundant | Info | Keep (harmless) |
-| F-08 | `level_report` takes a single sink; Stage 2 needs a fan-out | Info | **Done (run #3 impl.)**: sink registry + `level_report_add_sink` (§3.3). Not build-verified |
-| F-09 | Misaligned windows pass the 8-bit checksum with probability ~1/256, only while resyncing | Low | The median filter mitigates it; check `cks_err` in V-10 |
-| F-10 | `GPIO_IS_VALID_GPIO` / `GPIO_IS_VALID_OUTPUT_GPIO` are expected from `driver/gpio.h` (already included) in IDF v5.x. Not build-verified | Low | V-01. If missing, test `SOC_GPIO_VALID_GPIO_MASK` / `SOC_GPIO_VALID_OUTPUT_GPIO_MASK` from `soc/soc_caps.h` directly. **Build #5: `a02yyuw.c` compiled on v5.4.2, so the macros resolve** |
-| F-11 | Hand traces of every case in `test_parser.c` and `test_check_log.py` found no wrong expectations, but neither file has been executed. Re-traced in the run #2 review with the same result | Info | V-09 and the checker self-test (V-09b) |
-| F-12 | `a02yyuw` required the monolithic `driver` component, which IDF v5.3 split into `esp_driver_*`. Newer releases may remove the alias, and the bench IDF version is unknown (G4) | Medium (build portability) | **Done (run #2 review)**: requirement chosen from `IDF_VERSION_MAJOR/MINOR`. **≥ v5.3 branch (`esp_driver_uart`/`esp_driver_gpio`) build-confirmed on v5.4.2 (Build #5)**. The < v5.3 branch is still unbuilt |
-| F-13 | GPIO17 is a push-pull UART TX idling HIGH. If the wiring is swapped (G1), it drives against the sensor TX output. The previous docs presented the swap as harmless to diagnose | Medium (hardware safety) | **Documented (run #2 review)**: README caution + Kconfig help. Diagnose with `WT_SENSOR_TX_GPIO=-1`; optional ~1 kΩ series resistor. Default left at 17 to match PURPOSE. The operator may choose -1 as the default (functionally equivalent per §2.2, but check_log `--tx-gpio` must then be passed) |
-| F-14 | Review re-checked IDF `-Wall` exposure (format specifiers, `ESP_GOTO_ON_ERROR` needs a local `ret`, unused symbols) in all project sources and found no issue by reading | Info | V-01 (IDF builds with `-Werror=all`) |
-| F-15 | GitHub Actions Build #1 was **blocked before compiling**: "Project Git worktree is dirty; commit changes before building". Every project file is untracked (`?? CMakeLists.txt`, `components/`, `main/`, …). The commits so far (`b1c6a18`, `37f0f80`, `c4a0c6d`) do not contain the firmware. This is a process blocker, not a code defect | High (blocks V-01) | Commit all of `source/` (G12) and re-run the build. Commit `.gitignore` too, so `build/` and `sdkconfig` never make the tree dirty. **Run #3 impl.:** the tree was committed (`65c6ad9`) and the worktree was clean at phase start. Probably resolved for the next build; confirm with a real builder result |
-| F-16 | `.gitignore` ignores `*.log`, so bench captures named `*.log` (README examples) will not be committed as evidence | Low (evidence handling) | Store evidence captures as `test/bench/evidence/<check>-<date>.txt`, or `git add -f`. No code change needed |
-| F-17 | Builds #2 (2026-10-16) and #3 (2026-10-17) were both blocked at `git push` (HTTP 403) before any compilation. The identical error shows the credentials were not changed between attempts | High (blocks V-01) | Platform/operator credential fix (G14). No source change can resolve it. Re-triggering without changing the credentials will give the same result. **Superseded by F-18 (Build #4)** |
-| F-18 | Build #4 (2026-10-17) got past the 403 but was rejected by GitHub: the PAT has no `workflow` scope, and the push includes `.github/workflows/nostromo-build.yml` (commit `c4a0c6d`). Still no compilation | High (blocks V-01) | Operator token-scope fix (G15). No source change can resolve it. The workflow file lives outside `source/` and must not be removed by an agent. **Resolved by Build #5** (push accepted, CI checked out `d587225`) |
-| F-19 | Build #5 (2026-10-17, `d587225`): the compile and link of all project components succeeded on IDF v5.4.2. The job then failed in "Package binaries and build evidence": `git rev-parse HEAD` exit 128, "dubious ownership" | High (blocks V-01 completion and artifact upload) | Operator workflow fix (G16). No source change. The truncated log excerpt (from step 960/1004) shows no warnings or errors for project objects. Earlier steps were not supplied, so "no warnings" is unconfirmed. **Build #6 (`b05cc7f`) reproduced it identically**: the workflow was unchanged, and lines 53/97 still lack `safe.directory`. Build #7 failed the same way. **Resolved by Build #8** (`43e0382`, after operator commit `a45bcc0`): job completed, artifact `nostromo-firmware-8` uploaded |
+| ID | Finding | State |
+|----|---------|-------|
+| F-01 | Code never compiled | **Closed**: compiled and linked on IDF v5.4.2 (Build #5), full CI pass in Build #8 |
+| F-02 | Host test vector checksums | Checked by hand; V-09 not executed |
+| F-03 | `bytes_rx` / `line_errors` not printed | **Done**: `rx_bytes=` / `line_err=` appended |
+| F-04 | `CONFIG_LOG_COLORS` not set | **Done** |
+| F-05 | Kconfig allowed flash/non-existent GPIOs | **Done**: validated in `a02yyuw_init` |
+| F-06 | First tick logs "data lost" when no sensor | Intended (V-03b) |
+| F-07 | Redundant `gpio_pullup_en` | Harmless, kept |
+| F-08 | Single sink | **Done**: dispatcher + `level_report_add_sink`, compiled in CI |
+| F-09 | Misaligned window passes checksum ~1/256 while resyncing | Mitigated by median option; watch `cks_err` (V-10) |
+| F-10 | `GPIO_IS_VALID_*` macros | **Closed**: compiled on v5.4.2 |
+| F-11 | Host tests / checker self-tests hand-traced, never run | V-09, V-09b |
+| F-12 | Driver component split in IDF v5.3 | **Done**; ≥ v5.3 branch build-confirmed, < v5.3 unbuilt |
+| F-13 | GPIO17 contention on swapped wiring | Documented; diagnose with TX = -1. Operator decision on default pending |
+| F-14 | `-Werror=all` exposure | Read-checked. The compile succeeded, but the warning scan is unconfirmed (V-01) |
+| F-15…F-19 | CI process blockers (dirty tree, 403, `workflow` scope, dubious ownership) | **All resolved**; Build #8 completed |
+| F-20 (new) | The workflow's `SHA256SUMS` probably lists itself, so a plain `sha256sum -c` would report one false failure | Workaround in §4.1. Platform file, not edited by agents |
+| F-21 (new) | `init_nvs()` erase-on-version-change would wipe Stage 2 credentials | Accepted, documented (§5.3) |
 
 ### 7.3 ESP-IDF APIs used (build-compatibility surface)
-`uart_driver_install`, `uart_param_config` (`UART_SCLK_DEFAULT`), `uart_set_pin`,
-`uart_read_bytes`, `uart_flush_input`, `uart_driver_delete`, `uart_event_t`
-(`UART_DATA`, `UART_FIFO_OVF`, `UART_BUFFER_FULL`, `UART_FRAME_ERR`, `UART_PARITY_ERR`);
-`gpio_pullup_en`, `GPIO_IS_VALID_GPIO`, `GPIO_IS_VALID_OUTPUT_GPIO`; `esp_timer_get_time`; `ESP_RETURN_ON_FALSE` / `ESP_RETURN_ON_ERROR` /
-`ESP_GOTO_ON_ERROR` (`esp_check.h`); `xTaskCreate`, `xTaskDelayUntil`, `xQueueReceive`,
-`xQueueReset`, `taskENTER/EXIT_CRITICAL(portMUX)`; `nvs_flash_init` / `nvs_flash_erase`;
-`esp_app_get_description`, `esp_chip_info`, `esp_flash_get_size`, `esp_get_idf_version`.
-All of these exist in IDF v5.0+ **[ASSUMPTION, not build-verified]**. `UART_SCLK_DEFAULT`
-and `esp_app_desc.h` need v5.0 or later, so the firmware **will not build on v4.x**.
+Stage 1 (compiled on v5.4.2): `uart_driver_install`, `uart_param_config`
+(`UART_SCLK_DEFAULT`), `uart_set_pin`, `uart_read_bytes`, `uart_flush_input`,
+`uart_driver_delete`, `uart_event_t`; `gpio_pullup_en`, `GPIO_IS_VALID_GPIO`,
+`GPIO_IS_VALID_OUTPUT_GPIO`; `esp_timer_get_time`; `ESP_RETURN_ON_FALSE` /
+`ESP_RETURN_ON_ERROR` / `ESP_GOTO_ON_ERROR`; `xTaskCreate`, `xTaskDelayUntil`,
+`xQueueReceive`, `xQueueReset`, `taskENTER/EXIT_CRITICAL`; `nvs_flash_init` /
+`nvs_flash_erase`; `esp_app_get_description`, `esp_chip_info`, `esp_flash_get_size`,
+`esp_get_idf_version`. Needs IDF ≥ v5.0.
+
+Stage 2 (planned, not yet compiled): `esp_netif_init`, `esp_event_loop_create_default`,
+`esp_netif_create_default_wifi_sta`, `esp_wifi_init` (`WIFI_INIT_CONFIG_DEFAULT`),
+`esp_wifi_set_mode`, `esp_wifi_set_config`, `esp_wifi_start`, `esp_wifi_connect`,
+`esp_event_handler_instance_register`; `esp_read_mac`; `esp_timer_create` /
+`esp_timer_start_once`; `nvs_open` / `nvs_get_str` / `nvs_close`; `esp_mqtt_client_init`
+(`esp_mqtt_client_config_t` v5 layout: `.broker.address.uri`,
+`.credentials.username`, `.credentials.authentication.password`, `.session.last_will.*`),
+`esp_mqtt_client_register_event`, `esp_mqtt_client_start`, `esp_mqtt_client_publish`;
+`xQueueCreate` / `xQueueOverwrite`. Component `REQUIRES`: `esp_wifi esp_netif esp_event
+nvs_flash mqtt esp_timer level_report` (PRIV as appropriate).
 
 ### 7.4 Offline bench log checker
 `test/bench/check_log.py` reads a captured console log (file or stdin) and never opens a
@@ -361,7 +525,7 @@ with the §8 rule, and evaluates:
 | V-03b | Exactly one `sensor data lost`; every report `NO_DATA distance_mm=-1 age_ms=-1 ok=0`; one banner | Sensor actually disconnected |
 | V-05 | Every interval within period ± 50 ms; cumulative drift ≤ 50 ms; span ≥ 59 s | — |
 | V-10 | Final `cks_err/ok` < 1 %, `uart_ovf` = 0; span ≥ 10 min | — |
-| V-11 | `age_ms` of the first `NO_DATA` line ≤ 2000 (upper bound on unplug → detection); warning/recovery messages; recovery without reboot | Replug → `OK` latency (the replug time is not in the log) |
+| V-11 | `age_ms` of the first `NO_DATA` line ≤ 2000; warning/recovery messages; recovery without reboot | Replug → `OK` latency |
 | V-12 | One boot segment; no crash/reset text after the banner; monotonic timestamps; run ≥ 1 h | — |
 
 Verdicts: PASS / FAIL / INCONCLUSIVE (exit 0 / 1 / 3). The script assumes the default log
@@ -372,30 +536,31 @@ timestamp format `(<ms>)` (`CONFIG_LOG_TIMESTAMP_SOURCE_RTOS`). It has not been 
 Format: standard ESP-IDF log prefix `<L> (<ms since boot>) <tag>: <message>`. The host
 uses the `<ms since boot>` field for timing checks (V-05).
 
-**Boot banner** (once per boot, tag `wt`, then `a02yyuw`):
+**Boot banner** (once per boot, tag `wt`, then `a02yyuw`; Stage 2 appends one `ha` line):
 ```
 I (t) wt: === water_tank fw <ver> (built <date> <time>) ===
 I (t) wt: idf=<idf ver> chip_rev=v<maj>.<min> cores=<n> flash=<MB>MB
 I (t) wt: sensor=A02YYUW uart=<n> rx_gpio=<n> tx_gpio=<n> baud=9600
 I (t) wt: report_period_ms=<n> stale_ms=<n> median_window=<n>
 I (t) a02yyuw: UART<n> @9600 8N1, rx=GPIO<n> tx=GPIO<n>, median_window=<n>
+I (t) ha: enabled id=<id> ssid=<ssid> broker=<host:port> user=<user|-> period_ms=<n>   # or: ha: disabled (...)
 ```
 
-**Report line** (every `report_period_ms`, tag `wt`, level I):
+**Report line** (every `report_period_ms`, tag `wt`, level I). **Unchanged by Stage 2**:
 ```
 distance_mm=<int|-1> status=<OK|NO_DATA|OUT_OF_RANGE> age_ms=<int|-1> ok=<u32> cks_err=<u32> sync_skip=<u32> uart_ovf=<u32> rx_bytes=<u32> line_err=<u32>
 ```
-`rx_bytes` and `line_err` were added by F-03 (run #2 implementation), at the end of the line
-so existing parsers keep working. Future fields must also be appended.
+Future fields must only be appended.
 
 **Event lines:**
 - `W wt: sensor data lost: no valid frame for > <stale_ms> ms (check wiring, RX/TX pins)`
 - `I wt: sensor data available`
 - `W a02yyuw: UART FIFO|ring buffer overflow, input flushed`
 - `E a02yyuw: ... not usable ...` / `RX and TX GPIO must differ` (invalid configuration, followed by an abort)
+- Stage 2 (tag `ha`): `wifi connected ip=<ip>`, `wifi disconnected reason=<n>, retry in <s> s`,
+  `mqtt connected`, `mqtt disconnected`, `E ha: init failed: <err>; HA off`
 
 **Host parsing rule:** a line matching `\bwt: distance_mm=` is a report line. Parse the
 fields as whitespace-separated `key=value` pairs. Any `Guru Meditation`, `abort()`,
 `rst:`, `Task watchdog` or `Brownout detector` text after the boot banner counts as a
-failure in V-12. The brownout pattern was added in run #2 because the sensor shares the 3V3
-rail. Reference implementation: `test/bench/check_log.py`.
+failure in V-12. Reference implementation: `test/bench/check_log.py`.
