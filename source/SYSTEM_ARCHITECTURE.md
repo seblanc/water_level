@@ -39,7 +39,8 @@ document (no reference documents were provided).
 | #7 impl / review | No code change. **Build #10 (`d240242`) completed**: a docs-only delta over Build #9, so it compiled the same firmware. Artifact `nostromo-firmware-10` |
 | #8 arch | Inputs unchanged since the #7 review: Build #10 is still the latest result and is already recorded; no spec revision, operator guidance or tank geometry (G8). The architecture is confirmed unchanged. The only edits point the operator steps (§4.1, G23, M5) at the newest artifact `nostromo-firmware-10`. No source change |
 | #8 impl / review | No code change. **Build #11 (`9be93a0`) completed** (docs-only delta). Artifact `nostromo-firmware-11` |
-| **#9 arch (this phase)** | **New input: verification spec rev 3** (§4.2). It asks for ≥ 10 valid UART readings, all 10–60 cm, with no reported communication errors. Static analysis found two ways the current firmware can fail it with no real fault: start-up alignment artefacts in the error counters (F-33), and a possible boot-time NO_DATA warning (F-34). Designed: acquisition rebase of the counters in the driver (fixes F-33) and checker check `v15`. F-34 is accepted and tolerated by the check. Scheduled as M8a. No source change in this phase |
+| #9 impl / review | M8a written (attempts 3–5). **Build #12 (`84dfcb1`) completed**: the counter rebase compiles and links. Artifact `nostromo-firmware-12`. The review found no defect. New residual risk F-35: before lock the counters are raw, so a tolerated leading NO_DATA line (F-34) can show a pre-lock error and fail `check_v15`. It is rare, documented under V-15 and has no code change pending G24 |
+| #9 arch | **New input: verification spec rev 3** (§4.2). It asks for ≥ 10 valid UART readings, all 10–60 cm, with no reported communication errors. Static analysis found two ways the current firmware can fail it with no real fault: start-up alignment artefacts in the error counters (F-33), and a possible boot-time NO_DATA warning (F-34). Designed: acquisition rebase of the counters in the driver (fixes F-33) and checker check `v15`. F-34 is accepted and tolerated by the check. Scheduled as M8a. No source change in this phase |
 
 Earlier per-attempt detail is preserved in git history (commits `65c6ad9` … `bacd2c8`).
 
@@ -288,7 +289,7 @@ writes `flash_args` into `build/` with paths relative to that directory, so:
 ```
 unzip nostromo-firmware-8.zip -d fw8 && cd fw8
 cat source-commit.txt                    # expect 43e03828b63949c8c75de83f00ffe9b5f43b76b1
-# Current Stage 1+2 image: use nostromo-firmware-10.zip / fw10; source-commit.txt should read d24024299f19f75a53656872e8cb404440848e95
+# Current Stage 1+2+M8a image: use nostromo-firmware-12.zip / fw12; source-commit.txt should read 84dfcb18d1bcc94b1d0cbf204fced00bb46bf773
 grep -v ' \./SHA256SUMS$' SHA256SUMS | sha256sum -c --quiet
 cd build
 python -m esptool --chip esp32 -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 \
@@ -374,6 +375,12 @@ discarded, so nothing is hidden.
 - Residual risk: a false lock on a misaligned window that passes the checksum (~1/256,
   F-09) would rebase too early. The next real frame then aligns and any later checksum
   error counts. This is acceptable.
+- **F-35 (run #9 review, static):** the raw counters are published before lock. If a cold
+  boot gives the tolerated leading NO_DATA line (F-34) *and* a pre-lock framing/checksum
+  error, that line shows a non-zero `cks_err`/`line_err`, and §4.2.1 ("every report line")
+  makes V-15 fail. Both conditions must coincide, so this is expected to be rare
+  **[ASSUMPTION]**. One option, if the operator accepts it under G24: in `check_v15`, apply
+  the counter rule only from the first OK onward. Not done.
 
 #### 4.2.4 Design: `check_log.py --check v15`
 
@@ -727,7 +734,7 @@ same reasoning as for the credentials (§5.3).
 | G18 | 2.4 GHz coverage at the tank (new) | Adequate RSSI | Frequent reconnects, gaps in HA | `ha` log lines show disconnect reasons. Optional RSSI field later |
 | G20 | Why run #4 implementation attempt 2 was recorded as failed (run #5) | Phase ended before steps 5–10; no build was triggered (no builder result after Build #8) | If the failure was a build error on a pushed commit, its log is missing here | Operator/platform supplies the failure reason or a CI log for `7bac3ea` if one exists |
 | G21 | Will IDF ignore `components/ha_mqtt/` without `CMakeLists.txt`? (run #5) | — | — | **Moot**: the CMake file exists since run #6 (Build #9) |
-| G23 | Exact Stage 2 image size and the compiler warning scan (run #7) | App ≤ 1.5 MB (inferred from Build #9 passing the size check, §5.8); no project warnings (with `-Werror=all`, only non-`-Wall` warnings could pass silently) | Little TLS/OTA headroom; hidden warnings | Full CI log, or `build/water_tank.bin` from `nostromo-firmware-10` (same firmware sources as -9) |
+| G23 | Exact Stage 2 image size and the compiler warning scan (run #7) | App ≤ 1.5 MB (inferred from Build #9 passing the size check, §5.8); no project warnings (with `-Werror=all`, only non-`-Wall` warnings could pass silently) | Little TLS/OTA headroom; hidden warnings | Full CI log, or `build/water_tank.bin` from `nostromo-firmware-12` (latest, includes M8a) |
 | G22 | Why run #5 architecture (`bba5d98`) was recorded as failed (run #6) | Platform-side outcome; the deliverables it wrote are present and consistent with the tree | If a doc defect caused it, it is not identifiable from the tree | Operator/platform supplies the reason |
 | G19 | Bundled `mqtt` component in future IDF versions | Present in v5.4.2 | Build break on IDF ≥ 6 if it is moved to the component registry **[ASSUMPTION]** | CI pins v5.4.2; revisit on an IDF upgrade |
 | G24 | Exact meaning of verification spec rev 3 (run #9): "valid", "communication errors", whether a boot-time NO_DATA line is allowed, and the HA state during the test | §4.2.1 interpretation. Run V-15 with HA **not provisioned** (the CI image's default), or with the broker reachable: the "no `E` line" rule would otherwise trip on esp-mqtt retries (F-31) | An external verifier applies a stricter or looser bar than `check_v15` | Operator confirms or edits §4.2.1. Thresholds are function arguments, so a change is a one-line edit |

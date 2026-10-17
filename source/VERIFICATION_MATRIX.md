@@ -25,6 +25,17 @@ class `V15Test` (2 PASS, 4 FAIL, 1 INCONCLUSIVE case, plus a `CHECKS` membership
 The tolerated first-OK bound is 3 s, not the 2 s of the architecture draft (§4.2.1).
 **Not compiled, not executed.** The next CI build is the first with M8a.
 
+Run #9, REVIEW phase (attempt 6), 2026-10-17: **Build #12 (`84dfcb1`, the current HEAD,
+clean worktree) completed**. It is the first build that contains M8a, so the `a02yyuw.c`
+counter rebase is now **CI-compiled**. The artifact is `nostromo-firmware-12`, 35631780 B,
+1365 files. As before, the excerpt shows only the upload steps, so the image size and the
+warning scan are not confirmed. I did a static review of the rebase code against
+§4.2.3 and found no defect. `a02yyuw_parser_reset()` keeps the counters, so the
+`checksum_err - cks_base` subtraction cannot wrap after a UART overflow. I also found
+one residual risk, F-35 (see V-15). It is documented only, with no code change.
+`check_log.py` is Python, so CI does not cover it: V-09b and V-15 have **never been
+executed**. **No runtime check changed. Nothing was flashed, executed or measured.**
+
 **Only one check has evidence:** V-01, the CI build. Build #9 (`c804544`) is the first
 build with Stage 2 (`ha_mqtt`, `CONFIG_WT_HA_ENABLE=y`) compiled in. It completed and its
 artifact was uploaded. Builds #10 (`d240242`) and #11 (`9be93a0`, the latest) also
@@ -147,7 +158,7 @@ flashing steps (§4.1).
 | R-08e | `esp_wifi_set_storage(WIFI_STORAGE_RAM)`, password never logged, `.gitignore` entries, placeholder `tools/nvs_config.example.csv`; empty Kconfig credential defaults | CI-compiled (Build #9); repo/artifact grep not done |
 | R-08f | Depth-1 overwrite queue + prio-3 publisher in `ha_mqtt.c`; console sink registered first | CI-compiled (Build #9) |
 | R-09 | — (planned: DEVELOPMENT_PLAN.md M7a) | Not implemented |
-| R-10 | Existing: report line (`main.c`, `level_report_uart.c`), range check (`a02yyuw_distance_in_range`), counters (`a02yyuw.c`). M8a (run #9): counter rebase in `a02yyuw.c`, `check_v15` in `test/bench/check_log.py` | Report path CI-compiled. **M8a written, not yet compiled** |
+| R-10 | Existing: report line (`main.c`, `level_report_uart.c`), range check (`a02yyuw_distance_in_range`), counters (`a02yyuw.c`). M8a (run #9): counter rebase in `a02yyuw.c`, `check_v15` in `test/bench/check_log.py` | Report path and M8a rebase CI-compiled (Build #12, `84dfcb1`). `check_v15` and its self-tests never run |
 
 ## Verification checks
 
@@ -155,7 +166,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | Check | Req | Method | Procedure | Pass criterion | Needs | Result |
 |-------|-----|--------|-----------|----------------|-------|--------|
-| V-01 | R-01 | Build (GitHub Actions) | Committed tree → CI `idf.py -C source set-target esp32 build` | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version and the image size | CI | **PASS except warning scan / size** (Build #9, `c804544`, Stage 1 + Stage 2 compiled in; re-confirmed by Builds #10, `d240242`, and #11, `9be93a0`, same sources). IDF v5.4.2 assumed (same workflow as Build #5). The Stage 2 image size is not in the excerpt. It is ≤ 1.5 MB by inference (the build passed IDF's size check), but the exact size is NOT VERIFIED (the Stage 1 image was 0x35210 B, Build #5). Warning scan NOT VERIFIED |
+| V-01 | R-01 | Build (GitHub Actions) | Committed tree → CI `idf.py -C source set-target esp32 build` | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version and the image size | CI | **PASS except warning scan / size** (Build #9, `c804544`, Stage 1 + Stage 2 compiled in; re-confirmed by Builds #10, `d240242`, and #11, `9be93a0`, same sources; Build #12, `84dfcb1`, adds M8a). IDF v5.4.2 assumed (same workflow as Build #5). The Stage 2 image size is not in the excerpt. It is ≤ 1.5 MB by inference (the build passed IDF's size check), but the exact size is NOT VERIFIED (the Stage 1 image was 0x35210 B, Build #5). Warning scan NOT VERIFIED |
 | V-02 | R-02 | Bench | SYSTEM_ARCHITECTURE.md §4.1 (CI artifact, `write_flash @flash_args`) or `idf.py -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 flash` | esptool prints "Hash of data verified" for each segment and the board resets into the app. `source-commit.txt` matches the intended commit | Board + USB | NOT VERIFIED |
 | V-03 | R-03 | Bench / log (auto: `check_log.py --check v03`) | Sensor connected; capture the monitor output to a file | Banner shows `rx_gpio=16 tx_gpio=17 baud=9600`; within 2 s, `status=OK` lines with `ok=` increasing. On failure, record `rx_bytes`/`line_err` | Board + sensor | NOT VERIFIED |
 | V-03b | R-07 | Bench / log (auto: `--check v03b`) | Boot with the sensor **disconnected** | Banner; one `sensor data lost` warning; `status=NO_DATA distance_mm=-1 age_ms=-1 ok=0` lines at 1 Hz; no reboot | Board | NOT VERIFIED |
@@ -170,7 +181,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-11 | R-07 | Fault injection (partly auto: `--check v11`) | Disconnect the sensor TX wire for ~5 s, then reconnect | One `sensor data lost`; `NO_DATA` within ≤ 2 s; `sensor data available` + `OK` within ≤ 2 s of reconnect (manual timing); no reboot | Board + sensor | NOT VERIFIED |
 | V-12 | R-01..R-07 | Stability (auto: `--check v12`) | Run ≥ 1 h | No `Guru Meditation`, `abort()`, `Task watchdog`, `Brownout detector`, or new `rst:` after the banner; monotonic timestamps | Board + sensor | NOT VERIFIED |
 | V-14 | R-03 | Bench / config | `WT_SENSOR_RX_GPIO=6`, build, flash, observe; then restore 16 | `E a02yyuw: RX GPIO6 is not a usable input ...` then abort/reboot; no silent hang. Optional | Board | NOT VERIFIED |
-| V-15 | R-10 (AC-VS3) | Bench / log (auto after M8a: `check_log.py --check v15`) | Flat rigid target ~30 cm, square to the beam (or water surface at 10–60 cm). HA **not provisioned** (G24, F-31). Open the monitor (resets the board) and capture ≥ 20 s from reset. Use an artifact built after M8a | One banner with `rx_gpio=16 tx_gpio=17 baud=9600`; no crash text, no `E` line after it. ≥ 10 `status=OK` lines with increasing `ok=`. From the first OK on: every line `OK` with 100 ≤ `distance_mm` ≤ 600; `cks_err=0 line_err=0 uart_ovf=0` on every line; no `sensor data lost` after the first OK. Tolerated: `NO_DATA` lines and one `sensor data lost` before the first OK, which must come ≤ 3 s after the banner (F-34). Full rules: SYSTEM_ARCHITECTURE.md §4.2.1 | Board + sensor + 10–60 cm target (G25) | NOT VERIFIED (M8a written run #9, not yet compiled; checker and self-tests never run) |
+| V-15 | R-10 (AC-VS3) | Bench / log (auto after M8a: `check_log.py --check v15`) | Flat rigid target ~30 cm, square to the beam (or water surface at 10–60 cm). HA **not provisioned** (G24, F-31). Open the monitor (resets the board) and capture ≥ 20 s from reset. Use an artifact built after M8a | One banner with `rx_gpio=16 tx_gpio=17 baud=9600`; no crash text, no `E` line after it. ≥ 10 `status=OK` lines with increasing `ok=`. From the first OK on: every line `OK` with 100 ≤ `distance_mm` ≤ 600; `cks_err=0 line_err=0 uart_ovf=0` on every line; no `sensor data lost` after the first OK. Tolerated: `NO_DATA` lines and one `sensor data lost` before the first OK, which must come ≤ 3 s after the banner (F-34). Full rules: SYSTEM_ARCHITECTURE.md §4.2.1 | Board + sensor + 10–60 cm target (G25) | NOT VERIFIED (M8a CI-compiled in Build #12; use artifact `nostromo-firmware-12`, expected `source-commit.txt` `84dfcb1…`. Checker and self-tests never run. **F-35 residual risk:** before lock the raw counters are published, so if a cold boot gives a leading NO_DATA line (F-34) *and* a pre-lock framing/checksum error, that tolerated line shows `cks_err`/`line_err` > 0 and `check_v15` reports FAIL. On a FAIL, look at the `sensor locked … discarded` line and repeat once. Not changed, because §4.2.1 requires zero counters on every line until the operator decides otherwise (G24)) |
 | V-13a | R-08a, R-08e | Log + repo inspection | Flash a CI image with HA compiled in, NVS not provisioned; run V-03/V-05 | Exactly one `ha: disabled (...)` line; V-03/V-05 verdicts as with Build #8; no `wifi` lines. Repo/artifact grep finds no SSID or password | Board + sensor | NOT VERIFIED (ready: the Build #9/#10/#11 artifacts have HA compiled in; use #11) |
 | V-13b | R-08 | Log | Provision NVS (§5.3), reboot | `ha: enabled id=wt_xxxxxx ...`, `wifi connected ip=...`, `mqtt connected` within 30 s | Board, Wi-Fi AP, broker | DEFERRED |
 | V-13c | R-08b | HA UI + `mosquitto_sub -v -t 'watertank/#' -t 'homeassistant/#'` | After V-13b | Retained discovery configs present; device "Water tank" with a "Distance" entity (mm) in HA; state updates every ~10 s and matches the UART `distance_mm` | Broker, HA | DEFERRED |
@@ -200,7 +211,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED (build half passed in CI, Builds #9–#11) | Warning scan and image size (full compile log needed); V-09/V-09b never executed |
+| AC-1 | NOT VERIFIED (build half passed in CI, Builds #9–#12) | Warning scan and image size (full compile log needed); V-09/V-09b never executed |
 | AC-2 | NOT VERIFIED | Hardware (V-02) |
 | AC-3 | NOT VERIFIED | Board + sensor + log capture (V-03, V-05); G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Tape measure and target (V-06); tolerance is an assumption |
@@ -209,7 +220,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | AC-7 | NOT VERIFIED | Code is CI-compiled (Build #9). Still needs NVS provisioning (§5.3) plus Wi-Fi, a broker and HA (G5) |
 | AC-8 | NOT VERIFIED | As AC-7, plus AP/broker fault injection |
 
-| **AC-VS3** | NOT VERIFIED | M8a (counter rebase + `check_v15`) written, not compiled; needs a CI build, V-09b, and V-15 on hardware with a 10–60 cm target (G25) |
+| **AC-VS3** | NOT VERIFIED | M8a firmware part CI-compiled (Build #12). Still needs V-09b (host Python) and V-15 on hardware with a 10–60 cm target (G25) |
 
 AC-1…AC-8 are still **proposals** (G6) until the operator confirms them. AC-VS3 is
 operator-defined (verification spec rev 3).
@@ -229,6 +240,7 @@ operator-defined (verification spec rev 3).
 | 2026-10-17 | V-01 | Build #9 (`c804544`, first build with `ha_mqtt` + `WT_HA_ENABLE=y`) | **CI job COMPLETED**. Compile and link of Stage 2 implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only | "Artifact nostromo-firmware-9 has been successfully uploaded! Final size is 35629350 bytes. Artifact ID is 12103102433"; zip SHA256 `26bb8a9931eafdf442f7ff75f7969cbcddd69702867fecbcf02e93765816044b`; 1365 files |
 | 2026-10-17 | V-01 | Build #10 (`d240242`, same firmware sources as #9; docs-only commits since) | **CI job COMPLETED**. Same conclusions as #9. Compilation evidence only | "Artifact nostromo-firmware-10 has been successfully uploaded! Final size is 35629344 bytes. Artifact ID is 12106702118"; zip SHA256 `63b9a2a11ff97faa9c016918a8145cc762ec2cb726d4882ac72d711dbc9f9c30`; 1365 files |
 | 2026-10-17 | V-01 | Build #11 (`9be93a0`, same firmware sources as #9/#10; docs-only commits since) | **CI job COMPLETED**. Same conclusions as #9. Compilation evidence only | "Artifact nostromo-firmware-11 has been successfully uploaded! Final size is 35629338 bytes. Artifact ID is 12106614008"; zip SHA256 `d06fa3a455abe3b0a7446a7f6a3be4c86334fe50265b5ed4053cb7113c1bab5f`; 1365 files |
+| 2026-10-17 | V-01 | Build #12 (`84dfcb1`, first build with M8a counter rebase in `a02yyuw.c`) | **CI job COMPLETED**. M8a compiles and links (implied by the uploaded artifact). Warning scan and image size not in the excerpt. Compilation evidence only | "Artifact nostromo-firmware-12 has been successfully uploaded! Final size is 35631780 bytes. Artifact ID is 12109515780"; zip SHA256 `a67e6d58e177277aba34d1a78575400ba59f4d5f1fdcce6374aafd4558f29e62`; 1365 files |
 
 No other check has been executed. No build result exists for commits `184d5de`,
 `7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and

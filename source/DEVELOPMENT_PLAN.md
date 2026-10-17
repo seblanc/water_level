@@ -9,9 +9,17 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #9, IMPLEMENTATION phase (attempt 5), 2026-10-17.
+Last updated: run #9, REVIEW phase (attempt 6), 2026-10-17.
 
-**Run #9 implementation:** M8a is written (see the M8a section). It has not been compiled.
+**Run #9 review:** Build #12 (`84dfcb1`) completed, so the M8a firmware change is
+CI-compiled. A static review against §4.2.3 found no defect. One residual risk, F-35, is
+recorded under V-15 and has no code change. **M5 and V-15 should now use
+`nostromo-firmware-12`.** Older artifacts count the start-up alignment errors (F-33). There
+is no open code blocker. The remaining blockers are on the operator side: V-09/V-09b, the M5
+bench steps (including V-15 with a 10–60 cm target, G25), the warning scan (G23), G24, G5
+and G8. The next phases fall back to rule (c) unless a defect report or new input arrives.
+
+**Run #9 implementation (superseded by the review note):** M8a is written (see the M8a section). It has not been compiled.
 The next step is a CI build. If it fails, fix from the CI log before doing anything else.
 
 **Run #9 architecture:** new input, the verification spec **rev 3**
@@ -100,14 +108,14 @@ implementation phase should not change firmware behaviour on speculation.** Allo
 
 ### M5 — Stage 1 bench verification (operator; needs hardware)
 Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRIX.md.
-Use **Build #11's artifact** (`nostromo-firmware-11`, `9be93a0`; same firmware sources as
-Builds #9/#10). HA is compiled in but stays off until NVS is provisioned, so the expected
+Use **Build #12's artifact** (`nostromo-firmware-12`, `84dfcb1`; Builds #9–#11 plus the
+M8a counter rebase). HA is compiled in but stays off until NVS is provisioned, so the expected
 output is Stage 1 plus one `ha: disabled` line. If it shows problems, fall back to Build #8's artifact (Stage 1 only, available until
 about 2026-11-16).
 
 0. [ ] V-04 wiring inspection **before power-up** (sensor TX → GPIO16; F-13)
 1. [ ] V-09 `make -C test/host run`, and V-09b `python3 test/bench/test_check_log.py`
-2. [~] V-01: CI build passed (Build #8 Stage 1; Builds #9–#11 Stage 1 + 2). The warning scan is still pending
+2. [~] V-01: CI build passed (Build #8 Stage 1; Builds #9–#11 Stage 1 + 2; Build #12 adds M8a). The warning scan is still pending
 3. [ ] V-02 flash the CI artifact (SYSTEM_ARCHITECTURE.md §4.1) or a local build
 4. [ ] V-03b boot **without** the sensor → banner + NO_DATA, no crash (`check_log.py --check v03b`)
 5. [ ] V-03 boot with the sensor → `status=OK` (resolves G1; if `ok=0`, use `rx_bytes` to tell wiring from protocol problems)
@@ -199,7 +207,7 @@ implementation phase. All defaults are 0, so CI images behave exactly like Build
    section, VERIFICATION_MATRIX V-13h
 Exit: CI build passes. The UART report line is byte-identical (§8).
 
-### M8a — Verification spec rev 3 support (**written run #9, not yet compiled**; SYSTEM_ARCHITECTURE.md §4.2)
+### M8a — Verification spec rev 3 support (**written run #9; firmware part CI-compiled, Build #12 `84dfcb1`**; SYSTEM_ARCHITECTURE.md §4.2)
 One phase, file tools only. Do not touch `a02yyuw_parser.c`, `a02yyuw_filter.c`,
 `ha_mqtt` or the format of the §8 report line.
 Status (run #9 implementation, attempts 3–5): steps 1–6 written. Step 4 tests were never
@@ -231,7 +239,9 @@ just past 2 s (F-34).
 6. [x] Self-review: `-Werror=all` (unused variables, format specifiers), the critical
    section has no logging inside, and the report line is unchanged
 
-Exit: CI build passes (V-01). Bench V-15 is still the operator's job (M5 step 9).
+Exit: CI build passes (V-01). **Met: Build #12 completed** (warning scan still pending, G23).
+Bench V-15 is still the operator's job (M5 step 9). The Python checker is not covered by CI,
+so its self-tests (V-09b) must run before any V-15 verdict counts as evidence.
 
 ### M7 — Later
 - [ ] Volume in litres (needs the tank cross-section in addition to G8)
