@@ -164,6 +164,66 @@ static void test_parse_reply(void)
     /* Negative or non-numeric ids are reported as absent. */
     CHECK(web_payload_parse_reply("{\"ok\":true,\"id\":-3,\"rows\":\"x\"}", &r) == 0);
     CHECK(r.id == -1 && r.rows == -1);
+
+    /* Run #20 reply with the readback echo. */
+    CHECK(web_payload_parse_reply("{\"ok\":true,\"stored\":true,\"id\":9,\"rows\":10,"
+                                  "\"distance_mm\":1750,\"uptime_s\":3600,\"level_pct\":41.7}",
+                                  &r) == 0);
+    CHECK(r.ok && r.stored && r.id == 9 && r.rows == 10);
+    CHECK(r.distance_mm == 1750 && r.uptime_s == 3600 && r.error[0] == '\0');
+    CHECK(web_payload_parse_reply("{\"ok\":true,\"stored\":true,\"id\":9,\"rows\":10,"
+                                  "\"distance_mm\":null,\"uptime_s\":5}", &r) == 0);
+    CHECK(r.distance_mm == -1 && r.uptime_s == 5);
+
+    /* Error string kept, unsafe characters (here '=' and '<') dropped. */
+    CHECK(web_payload_parse_reply("{\"ok\":false,\"error\":\"bad key\"}", &r) == -1);
+    CHECK(strcmp(r.error, "bad key") == 0);
+    CHECK(web_payload_parse_reply("{\"ok\":false,\"error\":\"a=b<c\"}", &r) == -1);
+    CHECK(strcmp(r.error, "abc") == 0);
+    CHECK(web_payload_parse_reply("{\"ok\":false,\"error\":\"0123456789012345678901234567890123456789\"}",
+                                  &r) == -1);
+    CHECK(strlen(r.error) == WEB_REPLY_ERROR_LEN - 1);
+}
+
+static void test_check_stored(void)
+{
+    web_post_t p = sample();
+    web_reply_t r;
+
+    web_payload_parse_reply("{\"ok\":true,\"stored\":true,\"id\":9,\"rows\":10,"
+                            "\"distance_mm\":1750,\"uptime_s\":3600}", &r);
+    CHECK(web_payload_check_stored(&r, &p) == WEB_STORE_CONFIRMED);
+
+    /* Echo differs from what was sent. */
+    web_payload_parse_reply("{\"ok\":true,\"stored\":true,\"id\":9,\"rows\":10,"
+                            "\"distance_mm\":1751,\"uptime_s\":3600}", &r);
+    CHECK(web_payload_check_stored(&r, &p) == WEB_STORE_MISMATCH);
+    web_payload_parse_reply("{\"ok\":true,\"stored\":true,\"id\":9,\"rows\":10,"
+                            "\"distance_mm\":1750,\"uptime_s\":3599}", &r);
+    CHECK(web_payload_check_stored(&r, &p) == WEB_STORE_MISMATCH);
+    web_payload_parse_reply("{\"ok\":true,\"stored\":true,\"id\":9,\"rows\":10}", &r);
+    CHECK(web_payload_check_stored(&r, &p) == WEB_STORE_MISMATCH);
+
+    /* NO_DATA: empty distance sent, NULL stored. */
+    p.distance_mm = -1;
+    p.status = "NO_DATA";
+    web_payload_parse_reply("{\"ok\":true,\"stored\":true,\"id\":9,\"rows\":10,"
+                            "\"distance_mm\":null,\"uptime_s\":3600}", &r);
+    CHECK(web_payload_check_stored(&r, &p) == WEB_STORE_CONFIRMED);
+    p = sample();
+
+    /* Older post.php: ok without the echo. */
+    web_payload_parse_reply("{\"ok\":true,\"id\":9,\"rows\":10}", &r);
+    CHECK(web_payload_check_stored(&r, &p) == WEB_STORE_UNCONFIRMED);
+    web_payload_parse_reply("{\"ok\":true}", &r);
+    CHECK(web_payload_check_stored(&r, &p) == WEB_STORE_UNCONFIRMED);
+
+    web_payload_parse_reply("{\"ok\":false,\"error\":\"readback\"}", &r);
+    CHECK(web_payload_check_stored(&r, &p) == WEB_STORE_FAILED);
+    web_payload_parse_reply("<html>ok</html>", &r);
+    CHECK(web_payload_check_stored(&r, &p) == WEB_STORE_FAILED);
+    CHECK(web_payload_check_stored(NULL, &p) == WEB_STORE_FAILED);
+    CHECK(web_payload_check_stored(&r, NULL) == WEB_STORE_FAILED);
 }
 
 int main(void)
@@ -174,6 +234,7 @@ int main(void)
     test_form_no_data();
     test_form_encoding_and_limits();
     test_parse_reply();
+    test_check_stored();
 
     if (s_failures != 0) {
         fprintf(stderr, "test_web_payload: %d of %d checks FAILED\n", s_failures, s_checks);

@@ -121,10 +121,15 @@ Server side: copy `web/water/` to the web host. Setup, database and page details
 no reflash needed.
 
 Console lines: `web: enabled device=<mac> url=… key=set period_ms=60000`, then
-`web: post ok: http 200, stored as row <id>, <n> rows in table` (at most one per period;
-the row id comes from the server, so it proves the database stored the reading). On errors
-you see `web: post failed: <err>` (network/TLS), `web: post rejected: http <code>`
-(3xx = URL redirects, 401 = API key mismatch, 404 = wrong URL, 5xx = server/database) or
+`web: post ok: http 200, row <id> stored and read back (<d> mm), <n> rows in table`
+(at most one per period). Since run #20 `post.php` reads the row back from the database
+and echoes the stored distance and uptime; the firmware compares them with what it sent,
+so this line means the reading is in the database. With a pre-run-20 `post.php` the line
+is `post ok: http 200, stored as row <id> (not read back, old post.php)`. A retry that
+succeeds appends `, after <k> failed tries`. On errors you see `web: post failed: <err>`
+(network/TLS), `web: post rejected: http <code> (<server error>)` (3xx = URL redirects,
+401 `bad key`, 400 `bad field`, 404 = wrong URL, 500 `database`/`readback`),
+`web: post rejected: row <id> read back with other values (…)` or
 `web: post rejected: http 200 but the reply is not from post.php` (hosting error page or
 PHP not executed). One W line per outage; retries every 15 s. The key and the Wi-Fi password are never logged.
 
