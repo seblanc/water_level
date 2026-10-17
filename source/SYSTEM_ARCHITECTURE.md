@@ -1,6 +1,11 @@
 # SYSTEM ARCHITECTURE — Water Tank Level (project 1a95ca931d72)
 
-Last updated: run #8, ARCHITECTURE phase (attempt 1), 2026-10-17.
+Last updated: run #9, ARCHITECTURE phase (attempt 1), 2026-10-17.
+
+**Run #9 new input:** `specifications/verification.md` **revision 3** (platform commit
+`dcf9f13`). It is the first operator-defined pass bar. It was not in the phase prompt's
+spec list, and was found by reading the project directory. Analysis and design: §4.2.
+Plan: DEVELOPMENT_PLAN.md M8a.
 
 **Evidence state.** The firmware **has been compiled in CI** (GitHub Actions, `espressif/idf:v5.4.2`).
 Build #5 compiled and linked Stage 1, and Build #8 (`43e0382`) completed and uploaded the
@@ -30,7 +35,9 @@ document (no reference documents were provided).
 | #6 review (attempt 4) | **Build #9 (`c804544`) completed**: Stage 2 compiles and links. The static review of the HA code found no defect that needs a change. Image size and warnings are not in the excerpt. No hardware or host-test evidence |
 | #7 arch | No new builder result (Build #9 is still the latest; `9ecc02d` changed docs only). Stale "to write / open" markers from the pre-Build-#9 state removed (§3.2, §5.10, §6, §7.2, §7.3). New inference: Build #9 passing implies the Stage 2 app fits the 1.5 MB partition (§5.8). A third read-only pass over `ha_mqtt.c` / `main.c` found no defect. Optional next increment designed: tank level percentage (§5.11, M7a, needs G8). **The firmware is feature-complete for both stated goals; the project is now blocked on operator bench work (M5, M6b), not on code** |
 | #7 impl / review | No code change. **Build #10 (`d240242`) completed**: a docs-only delta over Build #9, so it compiled the same firmware. Artifact `nostromo-firmware-10` |
-| **#8 arch (this phase)** | Inputs unchanged since the #7 review: Build #10 is still the latest result and is already recorded; no spec revision, operator guidance or tank geometry (G8). The architecture is confirmed unchanged. The only edits point the operator steps (§4.1, G23, M5) at the newest artifact `nostromo-firmware-10`. No source change |
+| #8 arch | Inputs unchanged since the #7 review: Build #10 is still the latest result and is already recorded; no spec revision, operator guidance or tank geometry (G8). The architecture is confirmed unchanged. The only edits point the operator steps (§4.1, G23, M5) at the newest artifact `nostromo-firmware-10`. No source change |
+| #8 impl / review | No code change. **Build #11 (`9be93a0`) completed** (docs-only delta). Artifact `nostromo-firmware-11` |
+| **#9 arch (this phase)** | **New input: verification spec rev 3** (§4.2). It asks for ≥ 10 valid UART readings, all 10–60 cm, with no reported communication errors. Static analysis found two ways the current firmware can fail it with no real fault: start-up alignment artefacts in the error counters (F-33), and a possible boot-time NO_DATA warning (F-34). Designed: acquisition rebase of the counters in the driver (fixes F-33) and checker check `v15`. F-34 is accepted and tolerated by the check. Scheduled as M8a. No source change in this phase |
 
 Earlier per-attempt detail is preserved in git history (commits `65c6ad9` … `bacd2c8`).
 
@@ -266,6 +273,7 @@ A02YYUW --9600 8N1--> GPIO16 / UART2 --ISR, 512 B ring--> event queue --> RX tas
 | Sensor interface | PURPOSE: GPIO16/17, 3V3 | UART2 at 9600 8N1. Pins and port set in Kconfig `WT_SENSOR_*` |
 | Upstream interface | PURPOSE Stage 2: Home Assistant | MQTT 3.1.1 to a broker (e.g. the HA Mosquitto add-on) with HA MQTT Discovery (§5) |
 | Provisioning | None specified | Runtime settings in NVS (namespace `wt_cfg`), flashed from a local CSV. Kconfig strings are the fallback for local builds (§5.3) |
+| Verification spec | VERIFICATION rev 3: boot, ≥ 10 valid readings over UART, all 10–60 cm, no communication errors | The UART report line is the evidence. Check V-15 / `check_log.py --check v15` (§4.2). It needs a flat target at 10–60 cm, which the bench does not list (G25) |
 | Test constraints | TEST_SETUP and ACCEPTANCE empty; bench lists no stimuli, instruments, or voltage | Verification is log observation plus manual physical checks. Parser, filter (and Stage 2 payload builders) are covered by host unit tests. Stage 2 checks also need a Wi-Fi AP, a broker and HA, none of which are on the bench (VERIFICATION_MATRIX.md) |
 | Guardrails | GUARDRAILS rev 1 empty | Self-imposed: no use of strapping or flash pins; UART0 reserved for the console; sensor on 3V3 only; **no secrets in the repo** (credentials only in NVS images or a local `sdkconfig`, both git-ignored); HA failures must never reset the device or stop the console stream |
 
@@ -293,6 +301,101 @@ python -m esptool --chip esp32 -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-por
   flashed **with** its own partition table. `write_flash @flash_args` does this.
 - `esptool` is not inside the artifact. Use any esptool ≥ 4 (`pip install esptool`) or the
   one in a local IDF install.
+
+### 4.2 Verification specification rev 3 (run #9)
+
+Spec text (`specifications/verification.md`, rev 3): *"Verify that the ESP32 boots
+correctly and reports at least 10 valid distance measurements through UART. All
+measurements must be between 10 and 60 cm, with no reported communication errors."*
+
+#### 4.2.1 Interpretation against the §8 telemetry contract (gap G24 until confirmed)
+
+| Spec phrase | Operational meaning (one boot, captured from reset) |
+|-------------|------------------------------------------------------|
+| boots correctly | Exactly one firmware banner. Banner shows `rx_gpio=16 tx_gpio=17 baud=9600`. No `FAILURE_PATTERNS` text (`Guru Meditation`, `abort()`, `rst:`, `Task watchdog`, `Brownout detector`) after the banner. No `E` level line from any tag after the banner |
+| valid distance measurement | A report line with `status=OK` whose `ok=` counter is greater than on the previous counted line, so each one is a fresh, checksum-valid frame |
+| at least 10 | ≥ 10 such lines, i.e. a capture of ≥ ~12 s at the 1 s period |
+| between 10 and 60 cm | `100 ≤ distance_mm ≤ 600` on **every** report line from the first `OK` line onward. A NO_DATA or OUT_OF_RANGE line after the first OK is a failure |
+| no reported communication errors | `cks_err=0`, `line_err=0`, `uart_ovf=0` on **every** report line. There is no `sensor data lost` warning after the first OK. `sync_skip` is a resynchronisation counter, not an error, but it also reads 0 after M8a (§4.2.2) |
+| (tolerated) | Report lines with `status=NO_DATA` **before** the first OK, if the first OK comes ≤ 2 s after the banner (the same bound as V-03). One `sensor data lost` warning before the first OK (F-34) |
+
+#### 4.2.2 Risks in the current firmware (static analysis, nothing measured)
+
+- **F-33: start-up artefacts are reported as communication errors.** The sensor streams
+  without being asked, so the UART2 receiver can be enabled in the middle of a byte or of a
+  4-byte frame:
+  - Mid-byte: a 4-byte frame lasts ≈ 4.2 ms of every ~100–300 ms period, so this is a
+    few % of boots **[ASSUMPTION: estimate]**. It can give a framing error, which counts
+    in `line_err`, or a garbage byte.
+  - Mid-frame: this is routine and gives 1–3 `sync_skip`. If DATA_L or SUM happens to be
+    `0xFF`, which is roughly 1 % of boots, it also gives one `cks_err`.
+
+  The counters are cumulative from boot, so **every report line of that boot** would show
+  a non-zero error counter, and V-15 would fail with no real fault present.
+- **F-34: possible boot-time NO_DATA.** The first report comes one period (1 s) after the
+  reporter task starts. If the sensor has not sent a frame by then, which is plausible
+  only on a cold power-up (sensor start-up time unknown, G3), the first line is `NO_DATA`.
+  It comes with `W wt: sensor data lost … (check wiring, RX/TX pins)`. This is true
+  behaviour, and V-03b relies on that warning, so it is **accepted** and §4.2.1 tolerates
+  it. If an external verifier rejects it, the fallback is to suppress the warning only
+  until the first frame after boot. That fallback is not designed further, because it
+  would change V-03b.
+
+#### 4.2.3 Design: acquisition rebase in the `a02yyuw` driver (fixes F-33; M8a)
+
+The first valid frame after boot marks **lock**. The error counters before lock describe
+alignment, not link quality. At lock the driver rebases them to zero and logs what was
+discarded, so nothing is hidden.
+
+- RX-task-owned state in `s_ctx`: `bool locked`, plus `uint32_t cks_base` and
+  `sync_base` (parser counter values at lock).
+- `handle_bytes()`: when `a02yyuw_parser_feed` yields the **first** frame (`!locked`):
+  - set `locked = true`;
+  - record `cks_base = parser.checksum_err` and `sync_base = parser.sync_skips`;
+  - inside the existing critical section, copy the pre-lock `stats.line_errors` to a
+    local and set `stats.line_errors = 0`.
+
+  From then on, publish `stats.checksum_err = parser.checksum_err - cks_base` and
+  `stats.sync_skips = parser.sync_skips - sync_base`. Before lock, the raw values are
+  published unchanged, so a NO_DATA diagnosis ("rx_bytes>0 but no valid frames", V-03)
+  still sees them.
+- Once, after the critical section: `I (t) a02yyuw: sensor locked after <rx_bytes> bytes
+  (acquisition discarded: cks_err=<n> sync_skip=<n> line_err=<n>)`. Use the `PRIu32`
+  format. The tag is `a02yyuw`, not `wt`, so `check_log.py` report parsing is unaffected.
+- **Not rebased:** `ok` (frames_ok), `rx_bytes`, `uart_ovf` (an overflow before lock is
+  a real fault). There is no re-lock after a sensor dropout. Errors around a dropout or
+  reconnect stay visible (V-11).
+- The pure-C parser and its host tests are **unchanged**. The change is confined to
+  `a02yyuw.c`, about 20 lines. The format of the §8 report line is byte-identical. Only the
+  counting origin of `cks_err`, `sync_skip` and `line_err` moves from boot to lock (§8
+  note).
+- Residual risk: a false lock on a misaligned window that passes the checksum (~1/256,
+  F-09) would rebase too early. The next real frame then aligns and any later checksum
+  error counts. This is acceptable.
+
+#### 4.2.4 Design: `check_log.py --check v15`
+
+- `parse_log()` additionally collects every `E` level line after the first banner, from
+  any tag (`Log.errors: List[Tuple[int, str]]`). Today only `wt` events are kept, so this
+  is a new list. Existing checks do not use it.
+- `check_v15(log, expect_rx, expect_tx, min_valid=10, lo_mm=100, hi_mm=600,
+  first_ok_max_ms=2000)` applies §4.2.1 to `log.main`:
+  - PASS when every rule holds.
+  - INCONCLUSIVE when there is no banner, or no rule fails but there are fewer than 10
+    valid lines.
+  - FAIL otherwise.
+- The details list the count of valid lines, the distance min/max, the counter maxima,
+  and the first offending line.
+- Add `v15` to `CHECKS`, not to `DEFAULT_CHECKS`. Add self-tests in `test_check_log.py`:
+  - **PASS cases:** a clean 12-line log; a log with one leading NO_DATA line and the
+    `sensor data lost` warning.
+  - **FAIL cases:** `cks_err=1`; one line at 605 mm; NO_DATA after the first OK; an `E`
+    line.
+  - **INCONCLUSIVE case:** 9 valid lines.
+- Bench procedure (V-15): point the sensor at a flat, rigid target ~30 cm away, square to
+  the beam, with nothing else within the beam cone. Open the monitor, which resets the
+  board via DTR/RTS, and capture ≥ 20 s from the reset. Then run `check_log.py <capture>
+  --check v15`. A water surface at 10–60 cm also satisfies the spec.
 
 ## 5. Stage 2 — Home Assistant via MQTT (design, run #4)
 
