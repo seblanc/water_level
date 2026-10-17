@@ -9,7 +9,14 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #7, IMPLEMENTATION phase (attempt 2), 2026-10-17.
+Last updated: run #7, REVIEW phase (attempt 3), 2026-10-17.
+
+**Run #7 review:** Build #10 (`d240242`) completed. It is a docs-only delta over Build #9,
+so it compiled the same firmware again. No defect was found, and there was no source
+change. The latest artifact is `nostromo-firmware-10`, and M5/M6b may use it instead of
+`-9`. The remaining blockers are all on the operator side: bench checks (M5), host tests
+(V-09/V-09b), the full compile log (warning scan and image size, G23), the HA/broker setup
+(G5) and the tank geometry (G8).
 
 **Run #7 implementation:** no firmware change. No new builder or bench defect was reported:
 Build #9 (`c804544`) is the latest result and it completed. No operator guidance or tank
@@ -64,7 +71,7 @@ about 2026-11-16).
 
 0. [ ] V-04 wiring inspection **before power-up** (sensor TX → GPIO16; F-13)
 1. [ ] V-09 `make -C test/host run`, and V-09b `python3 test/bench/test_check_log.py`
-2. [~] V-01: CI build passed (Build #8 Stage 1; Build #9 Stage 1 + 2). The warning scan is still pending
+2. [~] V-01: CI build passed (Build #8 Stage 1; Builds #9/#10 Stage 1 + 2). The warning scan is still pending
 3. [ ] V-02 flash the CI artifact (SYSTEM_ARCHITECTURE.md §4.1) or a local build
 4. [ ] V-03b boot **without** the sensor → banner + NO_DATA, no crash (`check_log.py --check v03b`)
 5. [ ] V-03 boot with the sensor → `status=OK` (resolves G1; if `ok=0`, use `rx_bytes` to tell wiring from protocol problems)

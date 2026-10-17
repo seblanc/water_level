@@ -6,11 +6,22 @@ TELEMETRY revision 1. They are **proposals that need operator confirmation** (ga
 
 **Only one check has evidence:** V-01, the CI build. Build #9 (`c804544`) is the first
 build with Stage 2 (`ha_mqtt`, `CONFIG_WT_HA_ENABLE=y`) compiled in. It completed and its
-artifact was uploaded. The "no warnings" sub-criterion and the image size are still
+artifact was uploaded. Build #10 (`d240242`, the current HEAD) also completed. The "no warnings" sub-criterion and the image size are still
 unconfirmed, because the builder excerpt only shows the upload steps. Every other result
 is `NOT VERIFIED` or `DEFERRED`. Nothing has been flashed, run, or measured, and the host
 tests have not been executed. **CI build evidence is compilation evidence only, not
 hardware verification.**
+
+Run #7, REVIEW phase (attempt 3), 2026-10-17: Build #10 (`d240242`) has been recorded. The
+commits since Build #9 changed docs only (run #6 review, run #7 architecture and
+implementation notes), so Build #10 compiled the same firmware sources. It re-confirms
+V-01, but it does not add new coverage. The artifact is 35629344 B (Build #9: 35629350 B).
+The 6 B difference is in the zip, not the app. It is plausibly embedded commit/date text,
+but that is not verified. The image size and the warning scan are still not in the
+excerpt. I re-read `main/main.c` and found no defect: the init order is NVS → banner →
+sensor → `level_report` → HA → reporter, and the first NO_DATA report gives exactly one
+`sensor data lost` line (V-03b). **No source change. No check result changed except the
+V-01 log entry. Nothing was executed or measured.**
 
 Run #7, ARCHITECTURE phase (attempt 1), 2026-10-17: there is no new builder result
 (Build #9 is still the latest), and no source files changed. One **inference**, not a
@@ -104,7 +115,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | Check | Req | Method | Procedure | Pass criterion | Needs | Result |
 |-------|-----|--------|-----------|----------------|-------|--------|
-| V-01 | R-01 | Build (GitHub Actions) | Committed tree → CI `idf.py -C source set-target esp32 build` | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version and the image size | CI | **PASS except warning scan / size** (Build #9, `c804544`, Stage 1 + Stage 2 compiled in). IDF v5.4.2 assumed (same workflow as Build #5). The Stage 2 image size is not in the excerpt. It is ≤ 1.5 MB by inference (the build passed IDF's size check), but the exact size is NOT VERIFIED (the Stage 1 image was 0x35210 B, Build #5). Warning scan NOT VERIFIED |
+| V-01 | R-01 | Build (GitHub Actions) | Committed tree → CI `idf.py -C source set-target esp32 build` | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version and the image size | CI | **PASS except warning scan / size** (Build #9, `c804544`, Stage 1 + Stage 2 compiled in; re-confirmed by Build #10, `d240242`, same sources). IDF v5.4.2 assumed (same workflow as Build #5). The Stage 2 image size is not in the excerpt. It is ≤ 1.5 MB by inference (the build passed IDF's size check), but the exact size is NOT VERIFIED (the Stage 1 image was 0x35210 B, Build #5). Warning scan NOT VERIFIED |
 | V-02 | R-02 | Bench | SYSTEM_ARCHITECTURE.md §4.1 (CI artifact, `write_flash @flash_args`) or `idf.py -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 flash` | esptool prints "Hash of data verified" for each segment and the board resets into the app. `source-commit.txt` matches the intended commit | Board + USB | NOT VERIFIED |
 | V-03 | R-03 | Bench / log (auto: `check_log.py --check v03`) | Sensor connected; capture the monitor output to a file | Banner shows `rx_gpio=16 tx_gpio=17 baud=9600`; within 2 s, `status=OK` lines with `ok=` increasing. On failure, record `rx_bytes`/`line_err` | Board + sensor | NOT VERIFIED |
 | V-03b | R-07 | Bench / log (auto: `--check v03b`) | Boot with the sensor **disconnected** | Banner; one `sensor data lost` warning; `status=NO_DATA distance_mm=-1 age_ms=-1 ok=0` lines at 1 Hz; no reboot | Board | NOT VERIFIED |
@@ -148,7 +159,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED (build half passed in CI, Build #9) | Warning scan and image size (full compile log needed); V-09/V-09b never executed |
+| AC-1 | NOT VERIFIED (build half passed in CI, Builds #9/#10) | Warning scan and image size (full compile log needed); V-09/V-09b never executed |
 | AC-2 | NOT VERIFIED | Hardware (V-02) |
 | AC-3 | NOT VERIFIED | Board + sensor + log capture (V-03, V-05); G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Tape measure and target (V-06); tolerance is an assumption |
@@ -171,8 +182,9 @@ All eight criteria are still **proposals** (G6) until the operator confirms them
 | 2026-10-17 | V-01 | Build #6 (`b05cc7f`) | Same as #5 | Identical image size; same packaging error |
 | 2026-10-17 | V-01 | Build #7 (`d11d329`) | Same as #5 (size not in the excerpt) | Post-build esptool hint, then the same packaging error |
 | 2026-10-17 | V-01 | Build #8 (`43e0382`, after operator fix `a45bcc0`) | **CI job COMPLETED**. Passes except the "no warnings" sub-criterion. Compilation evidence only | "Artifact nostromo-firmware-8 has been successfully uploaded! Final size is 32716500 bytes. Artifact ID is 12094526795"; zip SHA256 `5d335266a1c0536bd8af73ace958f953ffdf2a2dd79c0ac0bf3cbdecaba31a3b`; 1360 files |
-
 | 2026-10-17 | V-01 | Build #9 (`c804544`, first build with `ha_mqtt` + `WT_HA_ENABLE=y`) | **CI job COMPLETED**. Compile and link of Stage 2 implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only | "Artifact nostromo-firmware-9 has been successfully uploaded! Final size is 35629350 bytes. Artifact ID is 12103102433"; zip SHA256 `26bb8a9931eafdf442f7ff75f7969cbcddd69702867fecbcf02e93765816044b`; 1365 files |
+| 2026-10-17 | V-01 | Build #10 (`d240242`, same firmware sources as #9; docs-only commits since) | **CI job COMPLETED**. Same conclusions as #9. Compilation evidence only | "Artifact nostromo-firmware-10 has been successfully uploaded! Final size is 35629344 bytes. Artifact ID is 12106702118"; zip SHA256 `63b9a2a11ff97faa9c016918a8145cc762ec2cb726d4882ac72d711dbc9f9c30`; 1365 files |
 
 No other check has been executed. No build result exists for commits `184d5de`,
-`7bac3ea`, `bba5d98`, `84d1412`, `30c9833` or `9ecc02d` (`9ecc02d` changed docs only).
+`7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and
+`2c139be` changed docs only).
