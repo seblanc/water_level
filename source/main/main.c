@@ -3,8 +3,9 @@
  *
  * Reads an A02YYUW ultrasonic sensor on UART2 (GPIO16/GPIO17 by default) and
  * prints the distance on the console once per report period (1 s default).
- * With WT_HA_ENABLE and Wi-Fi/MQTT settings provisioned, readings are also
- * published to Home Assistant over MQTT (components/ha_mqtt).
+ * With a Wi-Fi SSID configured (components/wt_wifi), readings are also POSTed
+ * to the PHP server in web/water/ (components/web_report, WT_WEB_ENABLE) and,
+ * if a broker is provisioned, published to Home Assistant (components/ha_mqtt).
  */
 #include <inttypes.h>
 #include <stdlib.h>
@@ -22,8 +23,13 @@
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
+#include "wt_wifi.h"
+
 #ifdef CONFIG_WT_HA_ENABLE
 #include "ha_mqtt.h"
+#endif
+#ifdef CONFIG_WT_WEB_ENABLE
+#include "web_report.h"
 #endif
 
 #ifdef CONFIG_WT_MEDIAN_FILTER
@@ -141,11 +147,16 @@ void app_main(void)
     ESP_ERROR_CHECK(a02yyuw_init(&sensor_cfg));
     ESP_ERROR_CHECK(level_report_init());
 
+    /* Sinks must be registered before the reporter task. Network features are
+     * optional: errors are already logged and the console stream continues. */
+#ifdef CONFIG_WT_WEB_ENABLE
+    (void)web_report_start();
+#endif
 #ifdef CONFIG_WT_HA_ENABLE
-    /* Must run before the reporter task (sink registration rule). HA is optional:
-     * errors are already logged and the console stream continues without it. */
     (void)ha_mqtt_start();
 #endif
+    /* After the sinks: both poll wt_wifi_is_connected(), so no event is missed. */
+    (void)wt_wifi_start();
 
     if (xTaskCreate(reporter_task, "wt_report", REPORT_TASK_STACK, NULL, REPORT_TASK_PRIO,
                     NULL) != pdPASS) {

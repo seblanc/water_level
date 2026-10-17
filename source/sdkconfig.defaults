@@ -24,6 +24,22 @@ CONFIG_WT_SENSOR_STALE_MS=1000
 # Stage 2: Wi-Fi + MQTT need more than the default 1 MB app partition (§5.8).
 CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
 
-# Home Assistant compiled in; it stays off at runtime until provisioned (§5.2).
-# No credentials here: use NVS (tools/nvs_config.example.csv) or a local sdkconfig.
+# Home network (operator request, run #14). Anyone who can read this repository
+# can read these values: if the repository is public, move them to NVS
+# (tools/nvs_config.example.csv, keys wifi_ssid / wifi_pass) and clear them here.
+CONFIG_WT_WIFI_SSID="weefee"
+CONFIG_WT_WIFI_PASSWORD="rptw-b5w3-bbps-52e4"
+
+# Web report to the PHP server in web/water/. The key must equal
+# $config['api_key'] in web/water/config.php (change both together).
+CONFIG_WT_WEB_ENABLE=y
+CONFIG_WT_WEB_POST_URL="https://randoresto.ch/water/post.php"
+CONFIG_WT_WEB_API_KEY="wt-q7m2x9k4p8v3n6c1"
+CONFIG_WT_WEB_POST_PERIOD_MS=60000
+# HTTPS: verify the server against the built-in CA bundle.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# Home Assistant compiled in; it stays off at runtime until a broker URI is set (§5.2).
+# No MQTT credentials here: use NVS (tools/nvs_config.example.csv) or a local sdkconfig.
 CONFIG_WT_HA_ENABLE=y
