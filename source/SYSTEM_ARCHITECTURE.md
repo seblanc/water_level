@@ -1,6 +1,6 @@
 # SYSTEM ARCHITECTURE — Water Tank Level (project 1a95ca931d72)
 
-Last updated: run #9, ARCHITECTURE phase (attempt 1), 2026-10-17.
+Last updated: run #9, ARCHITECTURE phase (attempt 2), 2026-10-17.
 
 **Run #9 new input:** `specifications/verification.md` **revision 3** (platform commit
 `dcf9f13`). It is the first operator-defined pass bar. It was not in the phase prompt's
@@ -728,6 +728,8 @@ same reasoning as for the credentials (§5.3).
 | G23 | Exact Stage 2 image size and the compiler warning scan (run #7) | App ≤ 1.5 MB (inferred from Build #9 passing the size check, §5.8); no project warnings (with `-Werror=all`, only non-`-Wall` warnings could pass silently) | Little TLS/OTA headroom; hidden warnings | Full CI log, or `build/water_tank.bin` from `nostromo-firmware-10` (same firmware sources as -9) |
 | G22 | Why run #5 architecture (`bba5d98`) was recorded as failed (run #6) | Platform-side outcome; the deliverables it wrote are present and consistent with the tree | If a doc defect caused it, it is not identifiable from the tree | Operator/platform supplies the reason |
 | G19 | Bundled `mqtt` component in future IDF versions | Present in v5.4.2 | Build break on IDF ≥ 6 if it is moved to the component registry **[ASSUMPTION]** | CI pins v5.4.2; revisit on an IDF upgrade |
+| G24 | Exact meaning of verification spec rev 3 (run #9): "valid", "communication errors", whether a boot-time NO_DATA line is allowed, and the HA state during the test | §4.2.1 interpretation. Run V-15 with HA **not provisioned** (the CI image's default), or with the broker reachable: the "no `E` line" rule would otherwise trip on esp-mqtt retries (F-31) | An external verifier applies a stricter or looser bar than `check_v15` | Operator confirms or edits §4.2.1. Thresholds are function arguments, so a change is a one-line edit |
+| G25 | Bench has no listed target or stimulus for 10–60 cm (run #9) | Operator places a flat rigid target ~30 cm in front of the sensor (or a water surface in range) | V-15 cannot run, or reads out of range / unstable on a soft or angled target | Operator adds the target to the bench profile (`stimuli`) |
 
 ## 7. Implementation status and static review
 
@@ -772,6 +774,8 @@ same reasoning as for the credentials (§5.3).
 | F-31 (run #6) | During a broker outage, esp-mqtt and its transport print their own `E`/`W` lines (tags such as `mqtt_client`, `transport_base`, `esp-tls`) on **every** reconnect attempt, i.e. every `HA_MQTT_RECONNECT_MS` = 10 s **[DATASHEET-RECALL]**. That defeats the "once per outage" intent of the `ha` lines | Accepted for M6a, no code change. These lines contain none of the V-12 failure patterns, so `check_log.py` verdicts are unaffected. Observe the noise in V-13e/V-13f. If it is a problem, lower those tags with `esp_log_level_set(..., ESP_LOG_NONE)` or `ESP_LOG_ERROR`, together with F-29 |
 | F-30 (run #5) | Once Stage 2 links, the app is expected to exceed the 1 MB default partition (§5.8), so the CMake/Kconfig commit without `CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y` would likely fail at the size check **[ASSUMPTION]** | **Closed**: landed together (`c804544`); Build #9 passed, so the app fits 1.5 MB (§5.8 inference). Exact size still unknown (G23) |
 | F-32 (run #7) | Read-only pass over `ha_mqtt.c` publisher/connect logic: QoS 1 discovery/availability, QoS 0 state; `s_announce_pending` is set before `s_mqtt_connected` in the CONNECTED handler, so the publisher can never see "connected" without a pending announce; on a failed announce the reading is skipped and the announce retried on the next reading (≤ 1 report period) | No defect. Recorded so later phases do not re-review it. Cross-core visibility relies on `volatile bool` without barriers; worst case is a one-period delay, which is acceptable |
+| F-33 (run #9) | `cks_err`, `sync_skip` and `line_err` count from boot, so the start-up alignment of the free-running sensor stream (RX enabled mid-byte or mid-frame) can leave a non-zero error counter on every report line of that boot; spec rev 3 would then fail with no real fault (§4.2.2) | **Open → M8a**: rebase at first valid frame (§4.2.3). Checked against `a02yyuw.c`: `handle_bytes()` copies the parser counters, `line_errors` is incremented in `rx_task`, and `a02yyuw_parser_reset()` only clears `len`, so `parser.x - base` cannot underflow after an overflow reset |
+| F-34 (run #9) | A cold power-up may give one `NO_DATA` report and a `sensor data lost` warning before the first frame | Accepted (V-03b depends on it); tolerated by `check_v15` before the first OK (§4.2.1) |
 
 ### 7.3 ESP-IDF APIs used (build-compatibility surface)
 Stage 1 (compiled on v5.4.2): `uart_driver_install`, `uart_param_config`
@@ -808,6 +812,7 @@ with the §8 rule, and evaluates:
 | V-10 | Final `cks_err/ok` < 1 %, `uart_ovf` = 0; span ≥ 10 min | — |
 | V-11 | `age_ms` of the first `NO_DATA` line ≤ 2000; warning/recovery messages; recovery without reboot | Replug → `OK` latency |
 | V-12 | One boot segment; no crash/reset text after the banner; monotonic timestamps; run ≥ 1 h | — |
+| V-15 (planned, M8a) | Spec rev 3 rules of §4.2.1: ≥ 10 fresh `OK` lines, all 100–600 mm, error counters 0, no `E` line | Target at 10–60 cm (G25) |
 
 Verdicts: PASS / FAIL / INCONCLUSIVE (exit 0 / 1 / 3). The script assumes the default log
 timestamp format `(<ms>)` (`CONFIG_LOG_TIMESTAMP_SOURCE_RTOS`). It has not been run.
@@ -833,10 +838,15 @@ distance_mm=<int|-1> status=<OK|NO_DATA|OUT_OF_RANGE> age_ms=<int|-1> ok=<u32> c
 ```
 Future fields must only be appended.
 
+Counter origin: `ok`, `rx_bytes` and `uart_ovf` count from boot. **After M8a** (§4.2.3),
+`cks_err`, `sync_skip` and `line_err` count from the first valid frame ("lock"); before
+lock they show the raw values. Until M8a lands, all count from boot.
+
 **Event lines:**
 - `W wt: sensor data lost: no valid frame for > <stale_ms> ms (check wiring, RX/TX pins)`
 - `I wt: sensor data available`
 - `W a02yyuw: UART FIFO|ring buffer overflow, input flushed`
+- `I a02yyuw: sensor locked after <n> bytes (acquisition discarded: cks_err=<n> sync_skip=<n> line_err=<n>)` (once per boot; **after M8a**)
 - `E a02yyuw: ... not usable ...` / `RX and TX GPIO must differ` (invalid configuration, followed by an abort)
 - Stage 2 (tag `ha`), as written in `ha_mqtt.c` / `ha_config.c`:
   - `I ha: wifi connected ip=<ip>`

@@ -4,6 +4,20 @@ The ACCEPTANCE spec is empty (revision 1) and there are no structured requiremen
 The requirements and acceptance criteria below are **derived** from PURPOSE, FLASHING and
 TELEMETRY revision 1. They are **proposals that need operator confirmation** (gap G6).
 
+**Exception (run #9):** `specifications/verification.md` **revision 3** is an
+operator-defined pass bar: *"Verify that the ESP32 boots correctly and reports at least 10
+valid distance measurements through UART. All measurements must be between 10 and 60 cm,
+with no reported communication errors."* It is tracked as R-10 / **AC-VS3** / **V-15**
+below. Only its operational reading (SYSTEM_ARCHITECTURE.md §4.2.1) is an interpretation
+(G24).
+
+Run #9, ARCHITECTURE phase (attempts 1–2), 2026-10-17: spec rev 3 analysed. Static
+analysis of `a02yyuw.c` shows the boot-cumulative error counters can record start-up
+alignment as `cks_err`/`line_err` (F-33). V-15 could then fail with no real fault.
+The fix (counter rebase at first frame) and check `v15` are planned as DEVELOPMENT_PLAN.md
+M8a. There is no new builder result: Build #11 is still the latest. **No check result
+changed. Nothing was compiled, executed or measured in this phase.**
+
 **Only one check has evidence:** V-01, the CI build. Build #9 (`c804544`) is the first
 build with Stage 2 (`ha_mqtt`, `CONFIG_WT_HA_ENABLE=y`) compiled in. It completed and its
 artifact was uploaded. Builds #10 (`d240242`) and #11 (`9be93a0`, the latest) also
@@ -93,6 +107,7 @@ flashing steps (§4.1).
 | R-08e | No credentials in the repository or in CI artifacts | Derived (guardrail, §5.3) |
 | R-08f | The 1 Hz UART stream (R-05) stays within tolerance while HA is active | Derived (§3.5) |
 | R-09 (optional) | HA shows the tank level in % from the provisioned empty/full distances | Derived (G8, §5.11). **Not implemented**; only applies if M7a is done |
+| R-10 | Boots correctly; ≥ 10 valid distance readings over UART, all 10–60 cm, no reported communication errors | **VERIFICATION rev 3 (operator)**; reading per §4.2.1 (G24) |
 
 ## Proposed acceptance criteria, pending operator confirmation
 
@@ -106,6 +121,7 @@ flashing steps (§4.1).
 | AC-6 | Runs ≥ 1 h with no reset, panic, or WDT | V-12 |
 | AC-7 (Stage 2) | A provisioned device appears in HA as "Water tank" with a distance entity in mm that updates at least every `WT_HA_PUBLISH_PERIOD_MS` + 1 s | V-13b, V-13c |
 | AC-8 (Stage 2) | Network faults (AP off, broker restart) recover without a reboot; AC-3 and AC-6 still hold with HA active | V-13e, V-13f, V-13g |
+| **AC-VS3** (operator-defined, not a proposal) | Verification spec rev 3, as quoted above | V-15 (with V-09b for the checker) |
 
 ## Implementation traceability
 
@@ -124,6 +140,7 @@ flashing steps (§4.1).
 | R-08e | `esp_wifi_set_storage(WIFI_STORAGE_RAM)`, password never logged, `.gitignore` entries, placeholder `tools/nvs_config.example.csv`; empty Kconfig credential defaults | CI-compiled (Build #9); repo/artifact grep not done |
 | R-08f | Depth-1 overwrite queue + prio-3 publisher in `ha_mqtt.c`; console sink registered first | CI-compiled (Build #9) |
 | R-09 | — (planned: DEVELOPMENT_PLAN.md M7a) | Not implemented |
+| R-10 | Existing: report line (`main.c`, `level_report_uart.c`), range check (`a02yyuw_distance_in_range`), counters (`a02yyuw.c`). Planned (M8a): counter rebase in `a02yyuw.c`, `check_v15` in `test/bench/check_log.py` | Report path CI-compiled. **M8a not implemented** |
 
 ## Verification checks
 
@@ -146,6 +163,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-11 | R-07 | Fault injection (partly auto: `--check v11`) | Disconnect the sensor TX wire for ~5 s, then reconnect | One `sensor data lost`; `NO_DATA` within ≤ 2 s; `sensor data available` + `OK` within ≤ 2 s of reconnect (manual timing); no reboot | Board + sensor | NOT VERIFIED |
 | V-12 | R-01..R-07 | Stability (auto: `--check v12`) | Run ≥ 1 h | No `Guru Meditation`, `abort()`, `Task watchdog`, `Brownout detector`, or new `rst:` after the banner; monotonic timestamps | Board + sensor | NOT VERIFIED |
 | V-14 | R-03 | Bench / config | `WT_SENSOR_RX_GPIO=6`, build, flash, observe; then restore 16 | `E a02yyuw: RX GPIO6 is not a usable input ...` then abort/reboot; no silent hang. Optional | Board | NOT VERIFIED |
+| V-15 | R-10 (AC-VS3) | Bench / log (auto after M8a: `check_log.py --check v15`) | Flat rigid target ~30 cm, square to the beam (or water surface at 10–60 cm). HA **not provisioned** (G24, F-31). Open the monitor (resets the board) and capture ≥ 20 s from reset. Use an artifact built after M8a | One banner with `rx_gpio=16 tx_gpio=17 baud=9600`; no crash text, no `E` line after it. ≥ 10 `status=OK` lines with increasing `ok=`. From the first OK on: every line `OK` with 100 ≤ `distance_mm` ≤ 600; `cks_err=0 line_err=0 uart_ovf=0` on every line; no `sensor data lost` after the first OK. Tolerated: `NO_DATA` lines and one `sensor data lost` before the first OK, which must come ≤ 2 s after the banner (F-34). Full rules: SYSTEM_ARCHITECTURE.md §4.2.1 | Board + sensor + 10–60 cm target (G25) | NOT VERIFIED (M8a not implemented) |
 | V-13a | R-08a, R-08e | Log + repo inspection | Flash a CI image with HA compiled in, NVS not provisioned; run V-03/V-05 | Exactly one `ha: disabled (...)` line; V-03/V-05 verdicts as with Build #8; no `wifi` lines. Repo/artifact grep finds no SSID or password | Board + sensor | NOT VERIFIED (ready: the Build #9/#10/#11 artifacts have HA compiled in; use #11) |
 | V-13b | R-08 | Log | Provision NVS (§5.3), reboot | `ha: enabled id=wt_xxxxxx ...`, `wifi connected ip=...`, `mqtt connected` within 30 s | Board, Wi-Fi AP, broker | DEFERRED |
 | V-13c | R-08b | HA UI + `mosquitto_sub -v -t 'watertank/#' -t 'homeassistant/#'` | After V-13b | Retained discovery configs present; device "Water tank" with a "Distance" entity (mm) in HA; state updates every ~10 s and matches the UART `distance_mm` | Broker, HA | DEFERRED |
@@ -184,7 +202,10 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | AC-7 | NOT VERIFIED | Code is CI-compiled (Build #9). Still needs NVS provisioning (§5.3) plus Wi-Fi, a broker and HA (G5) |
 | AC-8 | NOT VERIFIED | As AC-7, plus AP/broker fault injection |
 
-All eight criteria are still **proposals** (G6) until the operator confirms them.
+| **AC-VS3** | NOT VERIFIED | M8a (counter rebase + `check_v15`) not implemented; then CI build, V-09b, and V-15 on hardware with a 10–60 cm target (G25) |
+
+AC-1…AC-8 are still **proposals** (G6) until the operator confirms them. AC-VS3 is
+operator-defined (verification spec rev 3).
 
 ## Results log
 

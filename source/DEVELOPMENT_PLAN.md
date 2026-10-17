@@ -9,7 +9,17 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #8, REVIEW phase (attempt 3), 2026-10-17.
+Last updated: run #9, ARCHITECTURE phase (attempt 2), 2026-10-17.
+
+**Run #9 architecture:** new input, the verification spec **rev 3**
+(`specifications/verification.md`): "boots correctly", ≥ 10 valid distance readings over
+UART, all 10–60 cm, no reported communication errors. That is a spec revision, so it opens
+rule (d) below: the **next implementation phase does M8a**. M8a has two parts: rebase the
+driver's error counters at the first valid frame (F-33, SYSTEM_ARCHITECTURE.md §4.2.3) and
+add checker check `v15` (§4.2.4). Static analysis found the current firmware could fail the
+spec on a healthy bench, because start-up alignment counts as errors. Nothing was measured.
+New gaps: G24 (interpretation of the spec) and G25 (no 10–60 cm target listed on the bench).
+No source change in this phase.
 
 **Run #8 review:** Build #11 (`9be93a0`) completed. It is a docs-only delta over Build #10,
 so it compiled the same firmware a third time. No defect was found, and there was no source
@@ -53,6 +63,8 @@ implementation phase should not change firmware behaviour on speculation.** Allo
 - (b) Implement M7a, but only if the operator has supplied the tank geometry or asked for
   the feature.
 - (c) Otherwise, review/doc only, and stop early.
+- (d) (run #9) Implement M8a. The operator's verification spec rev 3 asked for it, so it
+  is not speculation. **This is the next implementation phase's work.**
 
 ## Milestones
 
@@ -65,6 +77,8 @@ implementation phase should not change firmware behaviour on speculation.** Allo
 - [x] Run #6: compile-surface pass over the Stage 2 sources against IDF v5.4 APIs and warning flags (SYSTEM_ARCHITECTURE.md §5.10.4). No new blocker; F-31 (esp-mqtt console noise) recorded as accepted. M6a below is unchanged
 - [x] Run #8: inputs unchanged; architecture confirmed; artifact references moved to `nostromo-firmware-10`
 - [x] Run #7: stale pre-Build-#9 markers cleaned up; app ≤ 1.5 MB inferred from Build #9 (§5.8, G23); publisher/connect logic re-checked (F-32, no defect); M7a (level %) designed (§5.11)
+- [x] Run #9: verification spec rev 3 analysed (§4.2): interpretation, F-33/F-34, rebase design, check `v15`, V-15, G24/G25
+- [ ] Operator confirms or corrects G24 (§4.2.1 reading of spec rev 3) and supplies a 10–60 cm target (G25)
 - [ ] Operator confirms or corrects G1 (pin direction), G2 (module type), G5 (broker/HA setup), G6 (acceptance criteria AC-1…AC-8), G8 (tank empty/full distances)
 
 ### M1–M4 — Stage 1 firmware (written runs #1–#3; **CI-compiled**, Builds #5–#8)
@@ -97,8 +111,12 @@ about 2026-11-16).
 6. [ ] V-05, V-06, V-07, V-11 (short bench checks)
 7. [ ] V-08, V-10, V-12 (long runs, real tank or equivalent; resolves G7)
 8. [ ] (Optional) V-14 invalid-pin rejection
+9. [ ] **V-15 (verification spec rev 3)** on the first artifact built **after M8a**:
+   target at ~30 cm, capture ≥ 20 s from reset, HA not provisioned (G24), then
+   `check_log.py <capture> --check v15`. It may run right after step 5. A run on an
+   older (pre-M8a) artifact is still valid evidence, but it may fail on F-33
 
-### M6a — Stage 2 implementation (**next IMPLEMENTATION phase**; agent, file tools only)
+### M6a — Stage 2 implementation (done run #6, CI-compiled Build #9; agent, file tools only)
 Scope follows SYSTEM_ARCHITECTURE.md §5 exactly. Every step must keep the §8 report line
 byte-identical and must not change Stage 1 module behaviour.
 
@@ -178,6 +196,36 @@ implementation phase. All defaults are 0, so CI images behave exactly like Build
    section, VERIFICATION_MATRIX V-13h
 Exit: CI build passes. The UART report line is byte-identical (§8).
 
+### M8a — Verification spec rev 3 support (**next IMPLEMENTATION phase**; SYSTEM_ARCHITECTURE.md §4.2)
+One phase, file tools only. Do not touch `a02yyuw_parser.c`, `a02yyuw_filter.c`,
+`ha_mqtt` or the format of the §8 report line.
+1. [ ] `components/a02yyuw/a02yyuw.c` (F-33, §4.2.3), RX-task-owned fields in `s_ctx`:
+   `bool locked; uint32_t cks_base, sync_base;`. In `handle_bytes()`, on the first frame
+   from `a02yyuw_parser_feed` while `!locked`:
+   - set `locked = true`, `cks_base = parser.checksum_err`, `sync_base = parser.sync_skips`;
+   - in the existing critical section, save `stats.line_errors` to a local and zero it;
+   - publish `checksum_err = parser.checksum_err - cks_base` and `sync_skips =
+     parser.sync_skips - sync_base` (raw values while unlocked);
+   - after the critical section, log once: `ESP_LOGI(TAG, "sensor locked after %" PRIu32
+     " bytes (acquisition discarded: cks_err=%" PRIu32 " sync_skip=%" PRIu32 " line_err=%"
+     PRIu32 ")", ...)`. Include `<inttypes.h>`.
+
+   `bytes_rx` there should include the current chunk. Do not rebase `frames_ok`,
+   `bytes_rx` or `uart_overflows`. No re-lock.
+2. [ ] `components/a02yyuw/include/a02yyuw.h`: doc comment on `a02yyuw_stats_t` stating
+   the counter origins (§8 "Counter origin")
+3. [ ] `test/bench/check_log.py`: `Log.errors` (every `E` line after the first banner, any
+   tag); `check_v15(...)` per §4.2.4; `v15` in `CHECKS` only (not `DEFAULT_CHECKS`); module
+   docstring lists V-15
+4. [ ] `test/bench/test_check_log.py`: PASS ×2, FAIL ×4, INCONCLUSIVE ×1 cases listed in
+   §4.2.4 (written; **will not be run by the agent**, V-09b)
+5. [ ] README: "Expected console output" gains the `sensor locked` line; "Bench log
+   checker" gains `--check v15` and the V-15 procedure
+6. [ ] Self-review: `-Werror=all` (unused variables, format specifiers), the critical
+   section has no logging inside, and the report line is unchanged
+
+Exit: CI build passes (V-01). Bench V-15 is still the operator's job (M5 step 9).
+
 ### M7 — Later
 - [ ] Volume in litres (needs the tank cross-section in addition to G8)
 - [ ] (Optional) lower the esp-mqtt/transport log tags during outages if the operator finds the console noisy (F-29/F-31)
@@ -189,6 +237,7 @@ Exit: CI build passes. The UART report line is byte-identical (§8).
 M0 ─→ M1–M4 (CI-compiled) ─→ M5 (operator, hardware)
                     └──────→ M6a steps 1–10 (written, run #6) ─→ CI Build #9 (compiled) ─→ M6b (operator, needs G5)
                                                                                 └─→ M7a (optional, needs G8)
+spec rev 3 (run #9) ─→ M8a (next impl) ─→ CI build ─→ M5 step 9 / V-15 (operator, needs G25 target)
 ```
 M5 and M6a are independent. M6a does not need the hardware results, because its default
 runtime behaviour without provisioning equals Stage 1. M6b should follow M5 step 5, so
@@ -220,3 +269,6 @@ that sensor problems are not confused with network problems.
 | Parser locks onto a false `0xFF` header | Resync design + host tests (V-09) |
 | 3.3 V supply reduces range (G7) | V-08 at real tank depth |
 | Flash and log share one port | `idf.py flash monitor` sequences them |
+| Spec rev 3 fails on start-up alignment, not a real fault (F-33) | M8a counter rebase at lock; discarded counts logged once, so nothing is hidden |
+| The external verifier reads spec rev 3 differently from §4.2.1 (G24) | Thresholds are `check_v15` arguments; the operator confirms the interpretation |
+| M8a driver edit breaks the CI build (no local compiler) | Change confined to about 20 lines in `a02yyuw.c`; the next phase fixes from the CI log first |
