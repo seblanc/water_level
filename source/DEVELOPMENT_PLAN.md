@@ -9,7 +9,14 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #8, IMPLEMENTATION phase (attempt 2), 2026-10-17.
+Last updated: run #8, REVIEW phase (attempt 3), 2026-10-17.
+
+**Run #8 review:** Build #11 (`9be93a0`) completed. It is a docs-only delta over Build #10,
+so it compiled the same firmware a third time. No defect was found, and there was no source
+change. The latest artifact is `nostromo-firmware-11`, and M5/M6b may use it. The blockers
+are unchanged and all on the operator side: bench checks (M5), host tests (V-09/V-09b), the
+full compile log (warning scan and image size, G23), the HA/broker setup (G5) and the tank
+geometry (G8).
 
 **Run #8 implementation:** no firmware change, under rule (c). The latest builder result
 is still Build #10 (`d240242`, completed). There is no defect report, no spec revision, no
@@ -76,14 +83,14 @@ implementation phase should not change firmware behaviour on speculation.** Allo
 
 ### M5 — Stage 1 bench verification (operator; needs hardware)
 Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRIX.md.
-Use **Build #10's artifact** (`nostromo-firmware-10`, `d240242`; same firmware sources as
-Build #9). HA is compiled in but stays off until NVS is provisioned, so the expected
+Use **Build #11's artifact** (`nostromo-firmware-11`, `9be93a0`; same firmware sources as
+Builds #9/#10). HA is compiled in but stays off until NVS is provisioned, so the expected
 output is Stage 1 plus one `ha: disabled` line. If it shows problems, fall back to Build #8's artifact (Stage 1 only, available until
 about 2026-11-16).
 
 0. [ ] V-04 wiring inspection **before power-up** (sensor TX → GPIO16; F-13)
 1. [ ] V-09 `make -C test/host run`, and V-09b `python3 test/bench/test_check_log.py`
-2. [~] V-01: CI build passed (Build #8 Stage 1; Builds #9/#10 Stage 1 + 2). The warning scan is still pending
+2. [~] V-01: CI build passed (Build #8 Stage 1; Builds #9–#11 Stage 1 + 2). The warning scan is still pending
 3. [ ] V-02 flash the CI artifact (SYSTEM_ARCHITECTURE.md §4.1) or a local build
 4. [ ] V-03b boot **without** the sensor → banner + NO_DATA, no crash (`check_log.py --check v03b`)
 5. [ ] V-03 boot with the sensor → `status=OK` (resolves G1; if `ok=0`, use `rx_bytes` to tell wiring from protocol problems)

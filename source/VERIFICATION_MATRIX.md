@@ -6,11 +6,21 @@ TELEMETRY revision 1. They are **proposals that need operator confirmation** (ga
 
 **Only one check has evidence:** V-01, the CI build. Build #9 (`c804544`) is the first
 build with Stage 2 (`ha_mqtt`, `CONFIG_WT_HA_ENABLE=y`) compiled in. It completed and its
-artifact was uploaded. Build #10 (`d240242`, the current HEAD) also completed. The "no warnings" sub-criterion and the image size are still
+artifact was uploaded. Builds #10 (`d240242`) and #11 (`9be93a0`, the latest) also
+completed with the same firmware sources. The "no warnings" sub-criterion and the image size are still
 unconfirmed, because the builder excerpt only shows the upload steps. Every other result
 is `NOT VERIFIED` or `DEFERRED`. Nothing has been flashed, run, or measured, and the host
 tests have not been executed. **CI build evidence is compilation evidence only, not
 hardware verification.**
+
+Run #8, REVIEW phase (attempt 3), 2026-10-17: Build #11 (`9be93a0`, the current HEAD) is
+recorded below. The commits since Build #10 (`efb1328`, `0d6b28b`, `9be93a0`) changed docs
+only, so Build #11 compiled the same firmware sources a third time. It re-confirms V-01 and
+adds no new coverage. The artifact is 35629338 B, the same 1365 files. The image size and
+the warning scan are still not in the excerpt. I re-read `main/main.c` and found no defect.
+V-02/V-13a may now use `nostromo-firmware-11` (expected `source-commit.txt`: `9be93a0…`).
+**No source change. No check result changed except the V-01 log entry. Nothing was
+executed or measured.**
 
 Run #8, ARCHITECTURE phase (attempt 1), 2026-10-17: there is no new builder result
 (Build #10 is still the latest and is already logged below), and no spec, operator or
@@ -121,7 +131,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | Check | Req | Method | Procedure | Pass criterion | Needs | Result |
 |-------|-----|--------|-----------|----------------|-------|--------|
-| V-01 | R-01 | Build (GitHub Actions) | Committed tree → CI `idf.py -C source set-target esp32 build` | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version and the image size | CI | **PASS except warning scan / size** (Build #9, `c804544`, Stage 1 + Stage 2 compiled in; re-confirmed by Build #10, `d240242`, same sources). IDF v5.4.2 assumed (same workflow as Build #5). The Stage 2 image size is not in the excerpt. It is ≤ 1.5 MB by inference (the build passed IDF's size check), but the exact size is NOT VERIFIED (the Stage 1 image was 0x35210 B, Build #5). Warning scan NOT VERIFIED |
+| V-01 | R-01 | Build (GitHub Actions) | Committed tree → CI `idf.py -C source set-target esp32 build` | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version and the image size | CI | **PASS except warning scan / size** (Build #9, `c804544`, Stage 1 + Stage 2 compiled in; re-confirmed by Builds #10, `d240242`, and #11, `9be93a0`, same sources). IDF v5.4.2 assumed (same workflow as Build #5). The Stage 2 image size is not in the excerpt. It is ≤ 1.5 MB by inference (the build passed IDF's size check), but the exact size is NOT VERIFIED (the Stage 1 image was 0x35210 B, Build #5). Warning scan NOT VERIFIED |
 | V-02 | R-02 | Bench | SYSTEM_ARCHITECTURE.md §4.1 (CI artifact, `write_flash @flash_args`) or `idf.py -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 flash` | esptool prints "Hash of data verified" for each segment and the board resets into the app. `source-commit.txt` matches the intended commit | Board + USB | NOT VERIFIED |
 | V-03 | R-03 | Bench / log (auto: `check_log.py --check v03`) | Sensor connected; capture the monitor output to a file | Banner shows `rx_gpio=16 tx_gpio=17 baud=9600`; within 2 s, `status=OK` lines with `ok=` increasing. On failure, record `rx_bytes`/`line_err` | Board + sensor | NOT VERIFIED |
 | V-03b | R-07 | Bench / log (auto: `--check v03b`) | Boot with the sensor **disconnected** | Banner; one `sensor data lost` warning; `status=NO_DATA distance_mm=-1 age_ms=-1 ok=0` lines at 1 Hz; no reboot | Board | NOT VERIFIED |
@@ -136,7 +146,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-11 | R-07 | Fault injection (partly auto: `--check v11`) | Disconnect the sensor TX wire for ~5 s, then reconnect | One `sensor data lost`; `NO_DATA` within ≤ 2 s; `sensor data available` + `OK` within ≤ 2 s of reconnect (manual timing); no reboot | Board + sensor | NOT VERIFIED |
 | V-12 | R-01..R-07 | Stability (auto: `--check v12`) | Run ≥ 1 h | No `Guru Meditation`, `abort()`, `Task watchdog`, `Brownout detector`, or new `rst:` after the banner; monotonic timestamps | Board + sensor | NOT VERIFIED |
 | V-14 | R-03 | Bench / config | `WT_SENSOR_RX_GPIO=6`, build, flash, observe; then restore 16 | `E a02yyuw: RX GPIO6 is not a usable input ...` then abort/reboot; no silent hang. Optional | Board | NOT VERIFIED |
-| V-13a | R-08a, R-08e | Log + repo inspection | Flash a CI image with HA compiled in, NVS not provisioned; run V-03/V-05 | Exactly one `ha: disabled (...)` line; V-03/V-05 verdicts as with Build #8; no `wifi` lines. Repo/artifact grep finds no SSID or password | Board + sensor | NOT VERIFIED (ready: the Build #9/#10 artifacts have HA compiled in; use #10) |
+| V-13a | R-08a, R-08e | Log + repo inspection | Flash a CI image with HA compiled in, NVS not provisioned; run V-03/V-05 | Exactly one `ha: disabled (...)` line; V-03/V-05 verdicts as with Build #8; no `wifi` lines. Repo/artifact grep finds no SSID or password | Board + sensor | NOT VERIFIED (ready: the Build #9/#10/#11 artifacts have HA compiled in; use #11) |
 | V-13b | R-08 | Log | Provision NVS (§5.3), reboot | `ha: enabled id=wt_xxxxxx ...`, `wifi connected ip=...`, `mqtt connected` within 30 s | Board, Wi-Fi AP, broker | DEFERRED |
 | V-13c | R-08b | HA UI + `mosquitto_sub -v -t 'watertank/#' -t 'homeassistant/#'` | After V-13b | Retained discovery configs present; device "Water tank" with a "Distance" entity (mm) in HA; state updates every ~10 s and matches the UART `distance_mm` | Broker, HA | DEFERRED |
 | V-13d | R-08c | Fault injection | Disconnect the sensor TX for ≥ 15 s, then reconnect | `watertank/<id>/sensor` → `offline` within ≤ 3 s (one report period after NO_DATA); the HA entity becomes unavailable; it returns after reconnect | Broker, HA, sensor | DEFERRED |
@@ -165,7 +175,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED (build half passed in CI, Builds #9/#10) | Warning scan and image size (full compile log needed); V-09/V-09b never executed |
+| AC-1 | NOT VERIFIED (build half passed in CI, Builds #9–#11) | Warning scan and image size (full compile log needed); V-09/V-09b never executed |
 | AC-2 | NOT VERIFIED | Hardware (V-02) |
 | AC-3 | NOT VERIFIED | Board + sensor + log capture (V-03, V-05); G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Tape measure and target (V-06); tolerance is an assumption |
@@ -190,6 +200,7 @@ All eight criteria are still **proposals** (G6) until the operator confirms them
 | 2026-10-17 | V-01 | Build #8 (`43e0382`, after operator fix `a45bcc0`) | **CI job COMPLETED**. Passes except the "no warnings" sub-criterion. Compilation evidence only | "Artifact nostromo-firmware-8 has been successfully uploaded! Final size is 32716500 bytes. Artifact ID is 12094526795"; zip SHA256 `5d335266a1c0536bd8af73ace958f953ffdf2a2dd79c0ac0bf3cbdecaba31a3b`; 1360 files |
 | 2026-10-17 | V-01 | Build #9 (`c804544`, first build with `ha_mqtt` + `WT_HA_ENABLE=y`) | **CI job COMPLETED**. Compile and link of Stage 2 implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only | "Artifact nostromo-firmware-9 has been successfully uploaded! Final size is 35629350 bytes. Artifact ID is 12103102433"; zip SHA256 `26bb8a9931eafdf442f7ff75f7969cbcddd69702867fecbcf02e93765816044b`; 1365 files |
 | 2026-10-17 | V-01 | Build #10 (`d240242`, same firmware sources as #9; docs-only commits since) | **CI job COMPLETED**. Same conclusions as #9. Compilation evidence only | "Artifact nostromo-firmware-10 has been successfully uploaded! Final size is 35629344 bytes. Artifact ID is 12106702118"; zip SHA256 `63b9a2a11ff97faa9c016918a8145cc762ec2cb726d4882ac72d711dbc9f9c30`; 1365 files |
+| 2026-10-17 | V-01 | Build #11 (`9be93a0`, same firmware sources as #9/#10; docs-only commits since) | **CI job COMPLETED**. Same conclusions as #9. Compilation evidence only | "Artifact nostromo-firmware-11 has been successfully uploaded! Final size is 35629338 bytes. Artifact ID is 12106614008"; zip SHA256 `d06fa3a455abe3b0a7446a7f6a3be4c86334fe50265b5ed4053cb7113c1bab5f`; 1365 files |
 
 No other check has been executed. No build result exists for commits `184d5de`,
 `7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and
