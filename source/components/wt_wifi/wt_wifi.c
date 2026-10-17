@@ -152,8 +152,15 @@ static esp_err_t start(void)
         ret = ESP_OK;  /* already created */
     }
     ESP_RETURN_ON_ERROR(ret, TAG, "event loop");
-    ESP_RETURN_ON_FALSE(esp_netif_create_default_wifi_sta() != NULL, ESP_ERR_NO_MEM, TAG,
-                        "wifi netif");
+    esp_netif_t *sta = esp_netif_create_default_wifi_sta();
+    ESP_RETURN_ON_FALSE(sta != NULL, ESP_ERR_NO_MEM, TAG, "wifi netif");
+    /* Sent as DHCP option 12 (router client list). Set before the first DHCP request. */
+    esp_err_t host_err = esp_netif_set_hostname(sta, CONFIG_WT_WIFI_HOSTNAME);
+    if (host_err != ESP_OK) {
+        /* Not fatal: lwIP keeps CONFIG_LWIP_LOCAL_HOSTNAME. */
+        ESP_LOGW(TAG, "hostname %s rejected (%s)", CONFIG_WT_WIFI_HOSTNAME,
+                 esp_err_to_name(host_err));
+    }
 
     esp_log_level_set("wifi", ESP_LOG_WARN);
     wifi_init_config_t wifi_init = WIFI_INIT_CONFIG_DEFAULT();
@@ -178,7 +185,7 @@ static esp_err_t start(void)
                       "wifi config (password must be empty or >= 8 characters)");
 
     /* The password is never logged. */
-    ESP_LOGI(TAG, "starting ssid=%s", ssid);
+    ESP_LOGI(TAG, "starting ssid=%s, hostname %s", ssid, CONFIG_WT_WIFI_HOSTNAME);
     /* Last step: STA_START triggers the first connect attempt. */
     ESP_GOTO_ON_ERROR(esp_wifi_start(), fail, TAG, "wifi start");
     return ESP_OK;

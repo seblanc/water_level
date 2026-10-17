@@ -77,6 +77,16 @@ menu "Water Tank Sensor"
                 Fallback when the NVS key wifi_pass is absent. Empty = open network,
                 otherwise at least 8 characters (WPA2/WPA3). Never logged.
 
+        config WT_WIFI_HOSTNAME
+            string "Network hostname"
+            default "espwatertank"
+            help
+                Hostname of the Wi-Fi station interface, sent to the router in the
+                DHCP request (option 12) and shown in its client list. Letters,
+                digits and '-', at most 32 characters. No mDNS: the board does not
+                answer espwatertank.local unless the router publishes DHCP names
+                in its DNS.
+
     endmenu
 
     menu "Web report (PHP server)"

@@ -100,6 +100,7 @@ valid frame, these three counters show the raw counts.
 | `WT_SENSOR_STALE_MS` | 1000 |
 | `WT_MEDIAN_FILTER` / `WT_MEDIAN_WINDOW` | off / 5 |
 | *Wi-Fi* → `WT_WIFI_SSID` / `WT_WIFI_PASSWORD` | `weefee` / (set) in `sdkconfig.defaults` (NVS values take precedence) |
+| *Wi-Fi* → `WT_WIFI_HOSTNAME` | `espwatertank` (DHCP hostname; no mDNS `.local` responder) |
 | *Web report* → `WT_WEB_ENABLE` | on |
 | `WT_WEB_POST_URL` | `https://randoresto.ch/water/post.php` |
 | `WT_WEB_API_KEY` | set in `sdkconfig.defaults`, must equal `api_key` in `web/water/config.php` |

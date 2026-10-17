@@ -29,6 +29,10 @@ CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
 # (tools/nvs_config.example.csv, keys wifi_ssid / wifi_pass) and clear them here.
 CONFIG_WT_WIFI_SSID="weefee"
 CONFIG_WT_WIFI_PASSWORD="rptw-b5w3-bbps-52e4"
+# Hostname (operator request, run #18). wt_wifi sets it on the STA netif; the lwIP
+# default is set too so any other netif uses the same name.
+CONFIG_WT_WIFI_HOSTNAME="espwatertank"
+CONFIG_LWIP_LOCAL_HOSTNAME="espwatertank"
 
 # Web report to the PHP server in web/water/. The key must equal
 # $config['api_key'] in web/water/config.php (change both together).
