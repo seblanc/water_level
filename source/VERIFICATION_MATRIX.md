@@ -11,6 +11,29 @@ with no reported communication errors."* It is tracked as R-10 / **AC-VS3** / **
 below. Only its operational reading (SYSTEM_ARCHITECTURE.md §4.2.1) is an interpretation
 (G24).
 
+Run #14, REVIEW phase (attempt 6), 2026-10-17: **Build #14 (`eeca1a6`) completed**. It
+is the first build with the run #14 sources (`wt_wifi`, `web_report`, credentials and
+API key in `sdkconfig.defaults`), so V-16b now passes except the warning scan and image
+size. Artifact `nostromo-firmware-14`, 35918562 B, 1372 files. Static review of
+`wt_wifi.c`, `web_report.c`, `web_payload.c`, `main.c`, `web/water/*.php` found two
+inconsistencies, both fixed after Build #14:
+1. `web_report.c` logged `post failed` on every 15 s retry, which contradicts V-16e.
+   Both W lines (`post failed`, `post rejected`) are now logged once per outage. **This
+   edit is not compiled yet.** The next CI build must cover it. Until then, Build #14 is
+   the newest compiled image, and only its log rate differs.
+2. The README and V-16c expected `"level_pct":50`, but PHP 7.1+ `json_encode(50.0)`
+   prints `50.0`. Doc fix only.
+
+The firmware/PHP field contract (`web_payload_form` ↔ `post.php`) matches. Both
+`ha_mqtt` and `web_report` wait for `wt_wifi_is_connected()`, and neither one starts Wi-Fi
+itself. **V-15 impact:** run #14 images start Wi-Fi on every boot. So a V-15 capture
+now also contains `wt_wifi`/`web` I/W lines. These are not counted as errors, because
+only `E` lines fail. If the AP or TLS stack prints an `E` line that is not silenced
+(`wifi` is at W level; `HTTP_CLIENT`/`esp-tls*`/`transport_base` are off), V-15 would
+FAIL for a network reason. This risk is unverified. If it happens, use the
+`nostromo-firmware-12`/`-13` artifact for V-15. **No PHP code has been executed, nothing
+was flashed or measured, and no runtime check changed.**
+
 Run #10, IMPLEMENTATION phase (attempt 1), 2026-10-17: operator guidance "do verification".
 There is no source change: the firmware is the one Build #12 compiled (`84dfcb1`), and spec
 rev 3 is unchanged. Physical verification is scheduled by the orchestrator after this phase.
@@ -168,6 +191,7 @@ flashing steps (§4.1).
 | R-08f | The 1 Hz UART stream (R-05) stays within tolerance while HA is active | Derived (§3.5) |
 | R-09 (optional) | HA shows the tank level in % from the provisioned empty/full distances | Derived (G8, §5.11). **Not implemented**; only applies if M7a is done |
 | R-10 | Boots correctly; ≥ 10 valid distance readings over UART, all 10–60 cm, no reported communication errors | **VERIFICATION rev 3 (operator)**; reading per §4.2.1 (G24) |
+| R-11 | Join Wi-Fi `weefee`; POST readings to PHP files at `https://randoresto.ch/water` that store them in a database; web page shows the tank level with empty = 30 cm, full = 5 cm (provisional) | **Operator guidance 2026-10-17 (run #14)** |
 
 ## Proposed acceptance criteria, pending operator confirmation
 
@@ -200,6 +224,7 @@ flashing steps (§4.1).
 | R-08e | `esp_wifi_set_storage(WIFI_STORAGE_RAM)`, password never logged, `.gitignore` entries, placeholder `tools/nvs_config.example.csv`; empty Kconfig credential defaults | CI-compiled (Build #9); repo/artifact grep not done |
 | R-08f | Depth-1 overwrite queue + prio-3 publisher in `ha_mqtt.c`; console sink registered first | CI-compiled (Build #9) |
 | R-09 | — (planned: DEVELOPMENT_PLAN.md M7a) | Not implemented |
+| R-11 | `components/wt_wifi/*` (shared STA, backoff 1→60 s), `components/web_report/*` (form POST over HTTPS + CA bundle, 60 s period, 15 s retry), `sdkconfig.defaults` (SSID/password, URL, API key), `main/main.c`; server: `web/water/*.php`, `.htaccess`; `test/host/test_web_payload.c` | Firmware CI-compiled (Build #14, `eeca1a6`) except the run #14 review edit of `web_report.c`; PHP never executed (no PHP runtime in any phase); host test never run |
 | R-10 | Existing: report line (`main.c`, `level_report_uart.c`), range check (`a02yyuw_distance_in_range`), counters (`a02yyuw.c`). M8a (run #9): counter rebase in `a02yyuw.c`, `check_v15` in `test/bench/check_log.py` | Report path and M8a rebase CI-compiled (Build #12, `84dfcb1`). `check_v15` and its self-tests never run |
 
 ## Verification checks
@@ -232,8 +257,8 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-13f | R-08d | Fault injection | Restart the broker / HA | `mqtt disconnected` → `mqtt connected`; discovery and availability republished; entity recovers without a device reboot | Broker | DEFERRED |
 | V-13g | R-08f | Log (auto: `--check v05`, `--check v12`) | Provisioned and connected: capture ≥ 60 s (V-05) and ≥ 1 h (V-12) | Same pass criteria as V-05 / V-12; no `Brownout detector`; `cks_err` rate as in V-10 (G17). Record the `wt_ha` stack high-water mark if logged | Board, sensor, Wi-Fi, broker | DEFERRED |
 | V-16a | R-11 (run #14) | Host unit test | `make -C test/host run` | `./test_web_payload` prints `<N> checks, 0 failures` and exits 0 | Host C compiler | NOT VERIFIED (never run) |
-| V-16b | R-11 | CI build | Committed run #14 tree (`e600560` or later) → CI | Build succeeds with `WT_WEB_ENABLE=y`, `wt_wifi`, `esp_http_client` and the certificate bundle; image fits the 1.5 MB app partition | CI | NOT VERIFIED (no build of the run #14 sources yet; Build #13 = `80d9fe7` predates them) |
-| V-16c | R-11 | Server | Upload `web/water/`, set `db_dsn`/credentials in `config.php`, run the `curl` test in `web/water/README.md` | `{"ok":true,"level_pct":50}`; wrong key → 401; the page shows the reading | Web host, DB | NOT VERIFIED (operator action) |
+| V-16b | R-11 | CI build | Committed run #14 tree (`e600560` or later) → CI | Build succeeds with `WT_WEB_ENABLE=y`, `wt_wifi`, `esp_http_client` and the certificate bundle; image fits the 1.5 MB app partition | CI | **PASS except warning scan / size** (Build #14, `eeca1a6`: CI job completed, artifact `nostromo-firmware-14` uploaded, so compile, link and the partition size check passed. Exact image size and warnings not in the excerpt). The run #14 review change to `web_report.c` (log rate limit) is **not compiled yet**: the next build must re-confirm |
+| V-16c | R-11 | Server | Upload `web/water/`, set `db_dsn`/credentials in `config.php`, run the `curl` test in `web/water/README.md` | `{"ok":true,"level_pct":50.0}` (`50` on PHP < 7.1); wrong key → 401; the page shows the reading | Web host, DB | NOT VERIFIED (operator action) |
 | V-16d | R-11 | Log + server | Flash a run #14 image; capture ≥ 2 min | `web: enabled … key=set`, Wi-Fi gets an IP on `weefee`, `web: post ok (http 200)` within 60 s of the IP; a new row about every 60 s; the page level matches (30 − distance_cm)/25 × 100 %. 1 Hz UART lines unchanged (V-05 still passes) | Board, sensor, AP, server | NOT VERIFIED |
 | V-16e | R-11 | Fault injection | Stop the AP or rename `post.php` for 3 min, then restore | One `post failed`/`post rejected` W line per outage start (not one per retry); no `E` lines from HTTP/TLS; posts resume without a reboot; UART report continues at 1 Hz | AP / server control | NOT VERIFIED |
 | V-13h | R-09 | HA UI + `mosquitto_sub` (only after M7a) | Provision `tank_empty_mm`/`tank_full_mm`, reboot; hold the target at the full and empty distances and at the midpoint | "Level" entity in %; ≈100 / ≈0 / ≈50 (±2 points), clamped outside the range; with the geometry removed, the entity disappears from HA (empty retained config); UART line unchanged | Broker, HA, target | NOT APPLICABLE (not implemented) |
@@ -269,7 +294,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | AC-7 | NOT VERIFIED | Code is CI-compiled (Build #9). Still needs NVS provisioning (§5.3) plus Wi-Fi, a broker and HA (G5) |
 | AC-8 | NOT VERIFIED | As AC-7, plus AP/broker fault injection |
 
-| AC-WEB (run #14) | NOT VERIFIED | V-16a–V-16e: no build, server deployment or hardware run yet; tank limits 30/5 cm are provisional |
+| AC-WEB (run #14) | NOT VERIFIED | V-16b passed in CI (Build #14) except warning scan/size. V-16a, V-16c–V-16e: no host test, server deployment or hardware run yet; tank limits 30/5 cm are provisional |
 | **AC-VS3** | NOT VERIFIED | M8a firmware part CI-compiled (Build #12). Still needs V-09b (host Python) and V-15 on hardware with a 10–60 cm target (G25) |
 
 AC-1…AC-8 are still **proposals** (G6) until the operator confirms them. AC-VS3 is
@@ -292,6 +317,7 @@ operator-defined (verification spec rev 3).
 | 2026-10-17 | V-01 | Build #11 (`9be93a0`, same firmware sources as #9/#10; docs-only commits since) | **CI job COMPLETED**. Same conclusions as #9. Compilation evidence only | "Artifact nostromo-firmware-11 has been successfully uploaded! Final size is 35629338 bytes. Artifact ID is 12106614008"; zip SHA256 `d06fa3a455abe3b0a7446a7f6a3be4c86334fe50265b5ed4053cb7113c1bab5f`; 1365 files |
 | 2026-10-17 | V-01 | Build #12 (`84dfcb1`, first build with M8a counter rebase in `a02yyuw.c`) | **CI job COMPLETED**. M8a compiles and links (implied by the uploaded artifact). Warning scan and image size not in the excerpt. Compilation evidence only | "Artifact nostromo-firmware-12 has been successfully uploaded! Final size is 35631780 bytes. Artifact ID is 12109515780"; zip SHA256 `a67e6d58e177277aba34d1a78575400ba59f4d5f1fdcce6374aafd4558f29e62`; 1365 files |
 | 2026-10-17 | V-01 | Build #13 (`80d9fe7`, same firmware sources as #12; docs-only commit since) | **CI job COMPLETED**. Same conclusions as #12. Compilation evidence only | "Artifact nostromo-firmware-13 has been successfully uploaded! Final size is 35631779 bytes. Artifact ID is 12111696880"; zip SHA256 `2d2177e2989880c24995e4ed42258d0b3499f053a9ce4baa43699688a2368c8e`; 1365 files |
+| 2026-10-17 | V-01, V-16b | Build #14 (`eeca1a6`, first build with `wt_wifi`, `web_report`, `WT_WEB_ENABLE=y` and the CA bundle) | **CI job COMPLETED**. Run #14 firmware compiles, links and fits the app partition (implied by the uploaded artifact). Warning scan and image size not in the excerpt. Compilation evidence only | "Artifact nostromo-firmware-14 has been successfully uploaded! Final size is 35918562 bytes. Artifact ID is 12113824428"; zip SHA256 `a04121ee5cfd978147ff184bbd6109fac50ab3818de1b3933ea59ac2d942579c`; 1372 files |
 
 No other check has been executed. No build result exists for commits `184d5de`,
 `7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and

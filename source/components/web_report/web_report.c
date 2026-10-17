@@ -83,9 +83,10 @@ static void web_sink(const level_reading_t *r, void *ctx)
 
 /* ---- post task ---- */
 
-/* One blocking POST. Returns the HTTP status, or -1 on a transport error. */
-static int post_reading(const level_reading_t *r)
+/* One blocking POST. Returns the HTTP status, or -1 with *err set on a transport error. */
+static int post_reading(const level_reading_t *r, esp_err_t *err)
 {
+    *err = ESP_FAIL;
     const web_post_t p = {
         .key = s_key,
         .device = s_device,
@@ -113,18 +114,16 @@ static int post_reading(const level_reading_t *r)
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (client == NULL) {
-        ESP_LOGW(TAG, "http client init failed");
+        *err = ESP_ERR_NO_MEM;
         return -1;
     }
     esp_http_client_set_header(client, "Content-Type", "application/x-www-form-urlencoded");
     esp_http_client_set_post_field(client, s_form, len);
 
     int status = -1;
-    esp_err_t err = esp_http_client_perform(client);
-    if (err == ESP_OK) {
+    *err = esp_http_client_perform(client);
+    if (*err == ESP_OK) {
         status = esp_http_client_get_status_code(client);
-    } else {
-        ESP_LOGW(TAG, "post failed: %s", esp_err_to_name(err));
     }
     esp_http_client_cleanup(client);
     return status;
@@ -139,6 +138,7 @@ static void post_task(void *arg)
     bool last_ok = false;
     bool posted = false;          /* at least one successful post since boot */
     bool posted_has_data = false; /* has_data of the last successful post */
+    bool logged_fail = false;     /* the current outage already has its W line */
     bool stack_logged = false;
     level_reading_t r;
 
@@ -162,7 +162,8 @@ static void post_task(void *arg)
         }
 
         last_try_us = now;
-        int status = post_reading(&r);
+        esp_err_t err;
+        int status = post_reading(&r, &err);
         bool ok = (status == 200);
         if (ok) {
             if (!last_ok) {
@@ -170,9 +171,16 @@ static void post_task(void *arg)
             }
             posted = true;
             posted_has_data = has_data;
-        } else if (status > 0 && (last_ok || !posted)) {
-            /* 401 = wrong API key, 404 = wrong URL, 5xx = server/database. */
-            ESP_LOGW(TAG, "post rejected: http %d", status);
+            logged_fail = false;
+        } else if (!logged_fail) {
+            /* One W line per outage start, not one per retry (V-16e). */
+            if (status > 0) {
+                /* 401 = wrong API key, 404 = wrong URL, 5xx = server/database. */
+                ESP_LOGW(TAG, "post rejected: http %d", status);
+            } else {
+                ESP_LOGW(TAG, "post failed: %s", esp_err_to_name(err));
+            }
+            logged_fail = true;
         }
         last_ok = ok;
 
