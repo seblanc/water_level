@@ -4,11 +4,21 @@ The ACCEPTANCE spec is empty (revision 1) and there are no structured requiremen
 The requirements and acceptance criteria below are **derived** from PURPOSE, FLASHING and
 TELEMETRY revision 1. They are **proposals that need operator confirmation** (gap G6).
 
-**Only one check has evidence:** V-01, the CI build. Build #8 completed and its artifact
-was uploaded, but the "no warnings" sub-criterion is still unconfirmed. Every other result
+**Only one check has evidence:** V-01, the CI build. Build #9 (`c804544`) is the first
+build with Stage 2 (`ha_mqtt`, `CONFIG_WT_HA_ENABLE=y`) compiled in. It completed and its
+artifact was uploaded. The "no warnings" sub-criterion and the image size are still
+unconfirmed, because the builder excerpt only shows the upload steps. Every other result
 is `NOT VERIFIED` or `DEFERRED`. Nothing has been flashed, run, or measured, and the host
 tests have not been executed. **CI build evidence is compilation evidence only, not
 hardware verification.**
+
+Run #6, REVIEW phase (attempt 4), 2026-10-17: Build #9 was recorded. I did a static review
+of `ha_mqtt.c`, `ha_config.c`, `ha_payload.c`, `main.c`, the Kconfig and the CMake files
+against the §5 design, and found no defect that needs a code change. The console sink is
+registered before the HA sink, so the §8 UART line stays first and unchanged. The HA paths
+contain no abort or restart, and nothing in the HA code calls `ESP_ERROR_CHECK`. The
+traceability states below now read "CI-compiled". **No runtime check changed, and nothing
+was executed or measured in this phase.**
 
 Run #6, ARCHITECTURE phase (attempt 1), 2026-10-17: there is no new builder result
 (Build #8 is still the latest) and the source tree has not changed since `7bac3ea`. A
@@ -72,11 +82,11 @@ flashing steps (§4.1).
 | R-05 | `main/main.c` `reporter_task`, `components/level_report/*` | CI-compiled |
 | R-06 | `components/a02yyuw/a02yyuw_parser.c`; `test/host/test_parser.c` | CI-compiled (tests not run) |
 | R-07 | `a02yyuw_get_latest` staleness; `main/main.c` transitions; `a02yyuw.c` filter reset | CI-compiled |
-| R-08, R-08b, R-08c | `components/ha_mqtt/ha_payload.c` (topics, discovery, availability), `ha_mqtt.c` (connect/announce, sink, publisher); `test/host/test_ha_payload.c`. Groundwork: `level_report_add_sink` | **Written, not in the build** (no `CMakeLists.txt`, F-22); never compiled; host test never run |
-| R-08a | Runtime gate in `ha_mqtt_start()` (written); `main.c` hook, Kconfig, `sdkconfig.defaults` (**not written**, M6a 5–7) | Partly written |
-| R-08d | `ha_mqtt.c` backoff timer, esp-mqtt reconnect, no abort/restart (written; F-25 open) | Written, not in the build |
-| R-08e | `esp_wifi_set_storage(WIFI_STORAGE_RAM)`, password never logged (written); `.gitignore` entries and the placeholder CSV **not written** (F-24) | Partly written |
-| R-08f | Depth-1 overwrite queue + prio-3 publisher in `ha_mqtt.c` (written) | Written, not in the build |
+| R-08, R-08b, R-08c | `components/ha_mqtt/ha_payload.c` (topics, discovery, availability), `ha_mqtt.c` (connect/announce, sink, publisher), `components/ha_mqtt/CMakeLists.txt`; `test/host/test_ha_payload.c`. Groundwork: `level_report_add_sink` | CI-compiled (Build #9); host test never run |
+| R-08a | Runtime gate in `ha_mqtt_start()`; `main.c` hook (`#ifdef CONFIG_WT_HA_ENABLE`), `main/Kconfig.projbuild` "Home Assistant" menu, `sdkconfig.defaults` (`WT_HA_ENABLE=y`, `SINGLE_APP_LARGE`) | CI-compiled (Build #9) |
+| R-08d | `ha_mqtt.c` backoff timer (F-25 fix: backoff only advances when the timer starts), esp-mqtt reconnect, no abort/restart | CI-compiled (Build #9) |
+| R-08e | `esp_wifi_set_storage(WIFI_STORAGE_RAM)`, password never logged, `.gitignore` entries, placeholder `tools/nvs_config.example.csv`; empty Kconfig credential defaults | CI-compiled (Build #9); repo/artifact grep not done |
+| R-08f | Depth-1 overwrite queue + prio-3 publisher in `ha_mqtt.c`; console sink registered first | CI-compiled (Build #9) |
 
 ## Verification checks
 
@@ -84,7 +94,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | Check | Req | Method | Procedure | Pass criterion | Needs | Result |
 |-------|-----|--------|-----------|----------------|-------|--------|
-| V-01 | R-01 | Build (GitHub Actions) | Committed tree → CI `idf.py -C source set-target esp32 build` | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version and the image size | CI | **PASS except warning scan** (Build #8, `43e0382`). IDF v5.4.2, image 0x35210 B (Build #5). Warning scan NOT VERIFIED. **Must be re-run once Stage 2 code is added** |
+| V-01 | R-01 | Build (GitHub Actions) | Committed tree → CI `idf.py -C source set-target esp32 build` | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version and the image size | CI | **PASS except warning scan / size** (Build #9, `c804544`, Stage 1 + Stage 2 compiled in). IDF v5.4.2 assumed (same workflow as Build #5). The Stage 2 image size is not in the excerpt, so the §5.8 budget is NOT VERIFIED (the Stage 1 image was 0x35210 B, Build #5). Warning scan NOT VERIFIED |
 | V-02 | R-02 | Bench | SYSTEM_ARCHITECTURE.md §4.1 (CI artifact, `write_flash @flash_args`) or `idf.py -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 flash` | esptool prints "Hash of data verified" for each segment and the board resets into the app. `source-commit.txt` matches the intended commit | Board + USB | NOT VERIFIED |
 | V-03 | R-03 | Bench / log (auto: `check_log.py --check v03`) | Sensor connected; capture the monitor output to a file | Banner shows `rx_gpio=16 tx_gpio=17 baud=9600`; within 2 s, `status=OK` lines with `ok=` increasing. On failure, record `rx_bytes`/`line_err` | Board + sensor | NOT VERIFIED |
 | V-03b | R-07 | Bench / log (auto: `--check v03b`) | Boot with the sensor **disconnected** | Banner; one `sensor data lost` warning; `status=NO_DATA distance_mm=-1 age_ms=-1 ok=0` lines at 1 Hz; no reboot | Board | NOT VERIFIED |
@@ -99,7 +109,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-11 | R-07 | Fault injection (partly auto: `--check v11`) | Disconnect the sensor TX wire for ~5 s, then reconnect | One `sensor data lost`; `NO_DATA` within ≤ 2 s; `sensor data available` + `OK` within ≤ 2 s of reconnect (manual timing); no reboot | Board + sensor | NOT VERIFIED |
 | V-12 | R-01..R-07 | Stability (auto: `--check v12`) | Run ≥ 1 h | No `Guru Meditation`, `abort()`, `Task watchdog`, `Brownout detector`, or new `rst:` after the banner; monotonic timestamps | Board + sensor | NOT VERIFIED |
 | V-14 | R-03 | Bench / config | `WT_SENSOR_RX_GPIO=6`, build, flash, observe; then restore 16 | `E a02yyuw: RX GPIO6 is not a usable input ...` then abort/reboot; no silent hang. Optional | Board | NOT VERIFIED |
-| V-13a | R-08a, R-08e | Log + repo inspection | Flash a CI image with HA compiled in, NVS not provisioned; run V-03/V-05 | Exactly one `ha: disabled (...)` line; V-03/V-05 verdicts as with Build #8; no `wifi` lines. Repo/artifact grep finds no SSID or password | Board + sensor | DEFERRED (code partly written, not in the build) |
+| V-13a | R-08a, R-08e | Log + repo inspection | Flash a CI image with HA compiled in, NVS not provisioned; run V-03/V-05 | Exactly one `ha: disabled (...)` line; V-03/V-05 verdicts as with Build #8; no `wifi` lines. Repo/artifact grep finds no SSID or password | Board + sensor | NOT VERIFIED (ready: the Build #9 artifact has HA compiled in) |
 | V-13b | R-08 | Log | Provision NVS (§5.3), reboot | `ha: enabled id=wt_xxxxxx ...`, `wifi connected ip=...`, `mqtt connected` within 30 s | Board, Wi-Fi AP, broker | DEFERRED |
 | V-13c | R-08b | HA UI + `mosquitto_sub -v -t 'watertank/#' -t 'homeassistant/#'` | After V-13b | Retained discovery configs present; device "Water tank" with a "Distance" entity (mm) in HA; state updates every ~10 s and matches the UART `distance_mm` | Broker, HA | DEFERRED |
 | V-13d | R-08c | Fault injection | Disconnect the sensor TX for ≥ 15 s, then reconnect | `watertank/<id>/sensor` → `offline` within ≤ 3 s (one report period after NO_DATA); the HA entity becomes unavailable; it returns after reconnect | Broker, HA, sensor | DEFERRED |
@@ -127,13 +137,13 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED (build half passed in CI) | Warning scan (full compile log needed); V-09/V-09b never executed |
+| AC-1 | NOT VERIFIED (build half passed in CI, Build #9) | Warning scan and image size (full compile log needed); V-09/V-09b never executed |
 | AC-2 | NOT VERIFIED | Hardware (V-02) |
 | AC-3 | NOT VERIFIED | Board + sensor + log capture (V-03, V-05); G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Tape measure and target (V-06); tolerance is an assumption |
 | AC-5 | NOT VERIFIED | Manual unplug/replug (V-11, V-03b) |
 | AC-6 | NOT VERIFIED | ≥ 1 h run (V-12) |
-| AC-7 | NOT VERIFIED | Stage 2 code partly written but not in the build (M6a steps 5–10, F-22); then CI build, Wi-Fi + broker + HA (G5) |
+| AC-7 | NOT VERIFIED | Code is CI-compiled (Build #9). Still needs NVS provisioning (§5.3) plus Wi-Fi, a broker and HA (G5) |
 | AC-8 | NOT VERIFIED | As AC-7, plus AP/broker fault injection |
 
 All eight criteria are still **proposals** (G6) until the operator confirms them.
@@ -151,5 +161,7 @@ All eight criteria are still **proposals** (G6) until the operator confirms them
 | 2026-10-17 | V-01 | Build #7 (`d11d329`) | Same as #5 (size not in the excerpt) | Post-build esptool hint, then the same packaging error |
 | 2026-10-17 | V-01 | Build #8 (`43e0382`, after operator fix `a45bcc0`) | **CI job COMPLETED**. Passes except the "no warnings" sub-criterion. Compilation evidence only | "Artifact nostromo-firmware-8 has been successfully uploaded! Final size is 32716500 bytes. Artifact ID is 12094526795"; zip SHA256 `5d335266a1c0536bd8af73ace958f953ffdf2a2dd79c0ac0bf3cbdecaba31a3b`; 1360 files |
 
+| 2026-10-17 | V-01 | Build #9 (`c804544`, first build with `ha_mqtt` + `WT_HA_ENABLE=y`) | **CI job COMPLETED**. Compile and link of Stage 2 implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only | "Artifact nostromo-firmware-9 has been successfully uploaded! Final size is 35629350 bytes. Artifact ID is 12103102433"; zip SHA256 `26bb8a9931eafdf442f7ff75f7969cbcddd69702867fecbcf02e93765816044b`; 1365 files |
+
 No other check has been executed. No build result exists for commits `184d5de`,
-`7bac3ea` or `bba5d98`.
+`7bac3ea`, `bba5d98`, `84d1412` or `30c9833`.

@@ -38,13 +38,14 @@ Last updated: run #6, ARCHITECTURE phase (attempt 1), 2026-10-17.
 
 ### M5 — Stage 1 bench verification (operator; needs hardware)
 Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRIX.md.
-Use **Build #8's artifact** (Stage 1 only, available until about 2026-11-16) or any later
-build. A later build with HA enabled but not provisioned should behave the same, plus one
-`ha: disabled` line.
+Use **Build #9's artifact** (`nostromo-firmware-9`; HA is compiled in but stays off until
+NVS is provisioned, so the expected output is Stage 1 plus one `ha: disabled` line). If
+Build #9 shows problems, fall back to Build #8's artifact (Stage 1 only, available until
+about 2026-11-16).
 
 0. [ ] V-04 wiring inspection **before power-up** (sensor TX → GPIO16; F-13)
 1. [ ] V-09 `make -C test/host run`, and V-09b `python3 test/bench/test_check_log.py`
-2. [~] V-01: CI build passed (Build #8). The warning scan is still pending
+2. [~] V-01: CI build passed (Build #8 Stage 1; Build #9 Stage 1 + 2). The warning scan is still pending
 3. [ ] V-02 flash the CI artifact (SYSTEM_ARCHITECTURE.md §4.1) or a local build
 4. [ ] V-03b boot **without** the sensor → banner + NO_DATA, no crash (`check_log.py --check v03b`)
 5. [ ] V-03 boot with the sensor → `status=OK` (resolves G1; if `ok=0`, use `rx_bytes` to tell wiring from protocol problems)
@@ -75,8 +76,11 @@ then 9–10. The point is to get Stage 2 into a CI build as early as possible: t
 in a row (run #4 impl, run #5 arch) ended as "failed" without a build. The F-25 fix is
 small and independent, and it can wait if the phase runs short.
 
-**Run #6 status (attempts 1–3):** steps 1–10 are written and statically reviewed. **None
-of them has been compiled yet**: the next CI build is the first one that includes Stage 2.
+**Run #6 status (attempts 1–3):** steps 1–10 are written and statically reviewed.
+**Run #6 review (attempt 4):** Build #9 (`c804544`) compiled them. It is the first CI build
+with Stage 2, and the job completed with its artifact uploaded. The review found nothing
+that needs a code change. The image size and the warning scan are not in the builder
+excerpt (see M6b). The host tests and bench self-tests have still never been run.
 
 5. [x] `components/ha_mqtt/CMakeLists.txt`: `ha_payload.c` always; `ha_config.c` and
    `ha_mqtt.c` only `if(CONFIG_WT_HA_ENABLE)`. `REQUIRES level_report`; `PRIV_REQUIRES
@@ -107,7 +111,7 @@ build** must compile them (V-01 re-run, record the image size against §5.8). If
 the following phase fixes the build from the CI log before doing anything else.
 
 ### M6b — Stage 2 verification (operator; needs Wi-Fi AP, broker, HA)
-- [ ] V-01 re-run: CI build with HA compiled in; record the image size against the §5.8 estimate
+- [~] V-01 re-run: CI build with HA compiled in. **Done: Build #9 completed.** Still open: record the image size against the §5.8 estimate (look for the `water_tank.bin binary size` line in the full log, or check the file in artifact `nostromo-firmware-9`)
 - [ ] V-13a…V-13g (VERIFICATION_MATRIX.md)
 - [ ] Re-run V-05 and V-12 with HA connected (Wi-Fi must not disturb the 1 Hz stream or cause brownouts, G17)
 
@@ -119,7 +123,7 @@ the following phase fixes the build from the CI log before doing anything else.
 
 ```
 M0 ─→ M1–M4 (CI-compiled) ─→ M5 (operator, hardware)
-                    └──────→ M6a steps 1–4 (written, 7bac3ea) ─→ steps 5–10 (next phase) ─→ CI build ─→ M6b (operator, needs G5)
+                    └──────→ M6a steps 1–10 (written, run #6) ─→ CI Build #9 (compiled) ─→ M6b (operator, needs G5)
 ```
 M5 and M6a are independent. M6a does not need the hardware results, because its default
 runtime behaviour without provisioning equals Stage 1. M6b should follow M5 step 5, so

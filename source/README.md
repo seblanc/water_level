@@ -5,9 +5,9 @@ prints the distance on the USB console once per second. Stage 2 publishes the re
 Home Assistant over MQTT (discovery), once Wi-Fi and broker settings are provisioned.
 See `SYSTEM_ARCHITECTURE.md` §5 and the "Home Assistant" section below.
 
-> **Status:** Stage 1 is **compiled in CI only** (GitHub Actions Build #8, IDF v5.4.2,
-> artifact `nostromo-firmware-8`). Stage 2 (`components/ha_mqtt`) has been added to the
-> build in run #6 and has **not been compiled yet**; the next CI build is its first.
+> **Status:** Stage 1 and Stage 2 are **compiled in CI only**. The latest is GitHub Actions
+> Build #9 for commit `c804544`, artifact `nostromo-firmware-9`, with HA compiled in and
+> off until provisioned. Build #8 (`nostromo-firmware-8`) is the Stage 1-only baseline.
 > Nothing has been flashed or tested on hardware, and the host tests have not been run.
 > See `VERIFICATION_MATRIX.md`.
 

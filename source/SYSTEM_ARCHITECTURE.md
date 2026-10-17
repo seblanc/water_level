@@ -1,14 +1,15 @@
 # SYSTEM ARCHITECTURE — Water Tank Level (project 1a95ca931d72)
 
-Last updated: run #6, ARCHITECTURE phase (attempt 1), 2026-10-17.
+Last updated: run #6, REVIEW phase (attempt 4), 2026-10-17.
 
-**Evidence state.** The Stage 1 firmware **has been compiled in CI** (GitHub Actions, `espressif/idf:v5.4.2`).
-Build #5 compiled and linked it, and Build #8 (`43e0382`) completed and uploaded artifact
-`nostromo-firmware-8`. **It has never been flashed, run, or measured on hardware**, and the
-host tests have never been executed. The partial Stage 2 sources added by commit `7bac3ea`
-(run #4 implementation, recorded as *failed*) **have never been compiled by anything**:
-no builder result exists for any commit after `43e0382`, and `components/ha_mqtt/` has no
-`CMakeLists.txt` yet (§5.10). No agent phase has had a shell, a toolchain, or bench access. Hardware facts below
+**Evidence state.** The firmware **has been compiled in CI** (GitHub Actions, `espressif/idf:v5.4.2`).
+Build #5 compiled and linked Stage 1, and Build #8 (`43e0382`) completed and uploaded the
+Stage 1 baseline artifact `nostromo-firmware-8`. **Build #9 (`c804544`) is the first build
+with Stage 2** (`components/ha_mqtt`, `CONFIG_WT_HA_ENABLE=y`). It completed and uploaded
+`nostromo-firmware-9`. Its image size and warning scan are not in the available excerpt
+(§5.8 budget unconfirmed). **Nothing has ever been flashed, run, or measured on hardware**,
+and the host tests have never been executed. No agent phase has had a shell, a toolchain,
+or bench access. Hardware facts below
 either come from the project specs or are marked **[ASSUMPTION]** or **[DATASHEET-RECALL]**.
 The second marker means general knowledge of the part, not checked against a supplied
 document (no reference documents were provided).
@@ -24,7 +25,9 @@ document (no reference documents were provided).
 | #4 arch | No new builder result (Build #8 is still the latest). Read-only check of `../.github/workflows/nostromo-build.yml` settles the CI-artifact layout and the flashing procedure (§4.1, G13 closed). **Stage 2 (Home Assistant over MQTT) design worked out to implementable detail (§5)**, with runtime gating so the Stage 1 behaviour is unchanged when HA is not configured. Plan for the next implementation phase: DEVELOPMENT_PLAN.md M6a |
 | #4 impl (attempt 2, commit `7bac3ea`, recorded **failed**) | M6a steps 1–4 written: `ha_payload.{h,c}`, `test_ha_payload.c` + Makefile target, `ha_config.c`, `ha_mqtt.c`, `ha_mqtt.h`, `ha_mqtt_priv.h`. Steps 5–10 (CMake, `main` hook, Kconfig, `sdkconfig.defaults`, provisioning template, README, checker case) **not written**. The reason for the failure is not recorded in the tree (G20) |
 | #5 arch (commit `bba5d98`, recorded **failed**) | No new builder result. Static review of the partial Stage 2 code (§5.10, F-22…F-30). Build-gating design for the remaining steps settled (§5.2, §5.10.2). M6a re-planned as the *remaining* steps 5–10 plus fixes. The doc updates are in the tree even though the phase was recorded as failed; the reason is not recorded (G22) |
-| **#6 arch (this phase)** | No new builder result (Build #8 is still the latest); the source tree is unchanged since `7bac3ea`. Second read-only pass over the never-compiled Stage 2 code, this time against the IDF v5.4.2 API and the `-Werror=all` flags (§5.10.4): **no new compile blocker found**. One new runtime finding (F-31, console noise from esp-mqtt during broker outages). The M6a plan is confirmed unchanged |
+| #6 impl (attempts 1–3, `c804544`) | M6a steps 5–10 written (CMake, Kconfig, `sdkconfig.defaults`, `main` hook, CSV, `.gitignore`, README, `HaLinesTest`), plus the F-25/F-26 fixes |
+| **#6 review (attempt 4, this phase)** | **Build #9 (`c804544`) completed**: Stage 2 compiles and links. The static review of the HA code found no defect that needs a change. Image size and warnings are not in the excerpt. No hardware or host-test evidence |
+| #6 arch | No new builder result (Build #8 is still the latest); the source tree is unchanged since `7bac3ea`. Second read-only pass over the never-compiled Stage 2 code, this time against the IDF v5.4.2 API and the `-Werror=all` flags (§5.10.4): **no new compile blocker found**. One new runtime finding (F-31, console noise from esp-mqtt during broker outages). The M6a plan is confirmed unchanged |
 
 Earlier per-attempt detail is preserved in git history (commits `65c6ad9` … `bacd2c8`).
 
@@ -35,7 +38,7 @@ Earlier per-attempt detail is preserved in git history (commits `65c6ad9` … `b
 | Stage | Goal | Source | State |
 |-------|------|--------|-------|
 | Stage 1 | Read an A02YYUW ultrasonic sensor over UART and print the distance on the UART console **once per second** | PURPOSE rev 1, TELEMETRY rev 1 | Written; **CI-compiled** (Builds #5–#8); not run on hardware |
-| Stage 2 | Send the level data to the user's Home Assistant | PURPOSE rev 1 ("Then we will implement…") | **Design complete (§5)**. Component code partly written (`7bac3ea`, §5.10) but **not wired into the build and never compiled**. Remaining work: M6a steps 5–10 |
+| Stage 2 | Send the level data to the user's Home Assistant | PURPOSE rev 1 ("Then we will implement…") | Design complete (§5). Code written (M6a 1–10) and **CI-compiled (Build #9)**; runtime-gated until NVS is provisioned. Not run on hardware; needs Wi-Fi + broker + HA (G5) |
 
 ## 2. Hardware context
 
