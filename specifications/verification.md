@@ -1,3 +1,3 @@
-<!-- NOSTROMO verification specification revision: 8 -->
+<!-- NOSTROMO verification specification revision: 9 -->
 
-Verify the data is well uploaded to the web server
+Verify the esp32 is connected to internet, and verify the data is correctly sent to the web server database and the page works fine
