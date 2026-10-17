@@ -9,7 +9,12 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #7, ARCHITECTURE phase (attempt 1), 2026-10-17.
+Last updated: run #7, IMPLEMENTATION phase (attempt 2), 2026-10-17.
+
+**Run #7 implementation:** no firmware change. No new builder or bench defect was reported:
+Build #9 (`c804544`) is the latest result and it completed. No operator guidance or tank
+geometry (G8) was supplied. Under rule (c) below, this phase stopped early with this note.
+The source tree is functionally identical to Build #9 plus the run #7 doc commits.
 
 ## Where the project stands (run #7)
 Both stated goals are **written and CI-compiled** (Build #9, `c804544`):
