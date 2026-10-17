@@ -106,9 +106,11 @@ static void handle_bytes(const uint8_t *data, size_t len)
     bytes_rx = s_ctx.stats.bytes_rx;
     taskEXIT_CRITICAL(&s_lock);
 
+    /* No key=value tokens here: the UART verifier samples every "cks_err=" etc. it sees,
+     * and these pre-lock counts are not the reported counters (F-36). */
     if (just_locked) {
-        ESP_LOGI(TAG, "sensor locked after %" PRIu32 " bytes (acquisition discarded: cks_err=%"
-                 PRIu32 " sync_skip=%" PRIu32 " line_err=%" PRIu32 ")",
+        ESP_LOGI(TAG, "sensor locked after %" PRIu32 " bytes; discarded during acquisition: %"
+                 PRIu32 " checksum errors, %" PRIu32 " sync skips, %" PRIu32 " line errors",
                  bytes_rx, s_ctx.cks_base, s_ctx.sync_base, line_err_discarded);
     }
 }

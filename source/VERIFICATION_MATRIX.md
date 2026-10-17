@@ -61,8 +61,9 @@ console 115200. Capture ≥ 20 s from reset with HA **not** provisioned. Expecte
 1. Boot: one banner line with `rx_gpio=16 tx_gpio=17 baud=9600`, then one `ha: disabled (...)`
    line. No `Guru Meditation`/`abort()`/`rst:` after the banner and no `E (` line.
 2. Possibly one `NO_DATA` line and one `sensor data lost` before the sensor locks (tolerated,
-   F-34). Then one `I a02yyuw: sensor locked after N bytes (acquisition discarded: ...)` line
-   (informational; it is not a reported communication error).
+   F-34). Then one `I a02yyuw: sensor locked after N bytes; discarded during acquisition: ...` line
+   (informational; it is not a reported communication error). Since run #14 attempt 7 it has
+   no `key=value` tokens (F-36). Verifiers must not sample it.
 3. One `I wt: distance_mm=<d> status=OK ... ok=<n> cks_err=0 sync_skip=<s> uart_ovf=0 ...
    line_err=0` line per second. Units are **mm**, so the spec's 10–60 cm is
    **100 ≤ `distance_mm` ≤ 600**. PASS needs ≥ 10 such lines with increasing `ok=`, all in
@@ -318,6 +319,7 @@ operator-defined (verification spec rev 3).
 | 2026-10-17 | V-01 | Build #12 (`84dfcb1`, first build with M8a counter rebase in `a02yyuw.c`) | **CI job COMPLETED**. M8a compiles and links (implied by the uploaded artifact). Warning scan and image size not in the excerpt. Compilation evidence only | "Artifact nostromo-firmware-12 has been successfully uploaded! Final size is 35631780 bytes. Artifact ID is 12109515780"; zip SHA256 `a67e6d58e177277aba34d1a78575400ba59f4d5f1fdcce6374aafd4558f29e62`; 1365 files |
 | 2026-10-17 | V-01 | Build #13 (`80d9fe7`, same firmware sources as #12; docs-only commit since) | **CI job COMPLETED**. Same conclusions as #12. Compilation evidence only | "Artifact nostromo-firmware-13 has been successfully uploaded! Final size is 35631779 bytes. Artifact ID is 12111696880"; zip SHA256 `2d2177e2989880c24995e4ed42258d0b3499f053a9ce4baa43699688a2368c8e`; 1365 files |
 | 2026-10-17 | V-01, V-16b | Build #14 (`eeca1a6`, first build with `wt_wifi`, `web_report`, `WT_WEB_ENABLE=y` and the CA bundle) | **CI job COMPLETED**. Run #14 firmware compiles, links and fits the app partition (implied by the uploaded artifact). Warning scan and image size not in the excerpt. Compilation evidence only | "Artifact nostromo-firmware-14 has been successfully uploaded! Final size is 35918562 bytes. Artifact ID is 12113824428"; zip SHA256 `a04121ee5cfd978147ff184bbd6109fac50ab3818de1b3933ea59ac2d942579c`; 1372 files |
+| 2026-10-17 | Platform UART verification #4 (Flash #2; the image is not named in the report, most likely Build #14) | Hardware, 12 sample lines, 4402 bytes | **FAILED**. Only `line_err equals 0` failed, with "Unparseable line_err=0)". The status, distance, `cks_err`, `uart_ovf` and `sync_skip` checks passed on 11–12 samples. The fault is in the log format (F-36), not in the sensor link | Evidence SHA-256 `74bddc02f2fbb5718b1a904b42cc7657ee95540ce3aa3d95bf8f081b51d91812`; 45 decode replacements (boot ROM noise). Fixed in source at run #14 attempt 7; not rebuilt or reflashed yet |
 
 No other check has been executed. No build result exists for commits `184d5de`,
 `7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and

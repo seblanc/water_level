@@ -363,9 +363,12 @@ discarded, so nothing is hidden.
   `stats.sync_skips = parser.sync_skips - sync_base`. Before lock, the raw values are
   published unchanged, so a NO_DATA diagnosis ("rx_bytes>0 but no valid frames", V-03)
   still sees them.
-- Once, after the critical section: `I (t) a02yyuw: sensor locked after <rx_bytes> bytes
-  (acquisition discarded: cks_err=<n> sync_skip=<n> line_err=<n>)`. Use the `PRIu32`
-  format. The tag is `a02yyuw`, not `wt`, so `check_log.py` report parsing is unaffected.
+- Once, after the critical section: `I (t) a02yyuw: sensor locked after <rx_bytes> bytes;
+  discarded during acquisition: <n> checksum errors, <n> sync skips, <n> line errors`. Use
+  the `PRIu32` format. The tag is `a02yyuw`, not `wt`, so `check_log.py` report parsing is
+  unaffected. **No `key=value` tokens** (F-36): the platform UART verifier samples every
+  `cks_err=`/`sync_skip=`/`line_err=` token in the log regardless of tag. The original
+  `(... line_err=0)` wording failed verification #4 ("Unparseable line_err=0)").
 - **Not rebased:** `ok` (frames_ok), `rx_bytes`, `uart_ovf` (an overflow before lock is
   a real fault). There is no re-lock after a sensor dropout. Errors around a dropout or
   reconnect stay visible (V-11).
@@ -382,6 +385,14 @@ discarded, so nothing is hidden.
   makes V-15 fail. Both conditions must coincide, so this is expected to be rare
   **[ASSUMPTION]**. One option, if the operator accepts it under G24: in `check_v15`, apply
   the counter rule only from the first OK onward. Not done.
+- **F-36 (run #14, hardware evidence):** platform UART verification #4 (Flash #2, evidence
+  SHA-256 `74bddc02f2fb…`) failed only `line_err equals 0`, with "Unparseable line_err=0)".
+  Cause: the platform verifier samples every `line_err=` token in the log, including the
+  one in the `sensor locked (... line_err=0)` line, and `0)` does not parse. The
+  `cks_err`/`sync_skip` checks counted that line too (12 samples against 11 report lines), so a
+  non-zero pre-lock count would also have failed them. Fix (run #14 attempt 7): the lock line
+  now uses plain words with no `key=value` tokens. Rule: only `wt` report lines may contain
+  the `distance_mm=`, `status=`, `cks_err=`, `sync_skip=`, `uart_ovf=` and `line_err=` tokens.
 
 #### 4.2.4 Design: `check_log.py --check v15`
 
@@ -857,7 +868,7 @@ of them from boot.
 - `W wt: sensor data lost: no valid frame for > <stale_ms> ms (check wiring, RX/TX pins)`
 - `I wt: sensor data available`
 - `W a02yyuw: UART FIFO|ring buffer overflow, input flushed`
-- `I a02yyuw: sensor locked after <n> bytes (acquisition discarded: cks_err=<n> sync_skip=<n> line_err=<n>)` (once per boot; images with M8a only)
+- `I a02yyuw: sensor locked after <n> bytes; discarded during acquisition: <n> checksum errors, <n> sync skips, <n> line errors` (once per boot; run #14 attempt 7 onward. Images from M8a up to Build #14 print the older `(acquisition discarded: cks_err=<n> sync_skip=<n> line_err=<n>)` form)
 - `E a02yyuw: ... not usable ...` / `RX and TX GPIO must differ` (invalid configuration, followed by an abort)
 - Stage 2 (tag `ha`), as written in `ha_mqtt.c` / `ha_config.c`:
   - `I ha: wifi connected ip=<ip>`

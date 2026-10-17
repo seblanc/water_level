@@ -57,7 +57,7 @@ I (xxx) wt: idf=v5.x chip_rev=v3.0 cores=2 flash=4MB
 I (xxx) wt: sensor=A02YYUW uart=2 rx_gpio=16 tx_gpio=17 baud=9600
 I (xxx) wt: report_period_ms=1000 stale_ms=1000 median_window=1
 I (xxx) a02yyuw: UART2 @9600 8N1, rx=GPIO16 tx=GPIO17, median_window=1
-I (xxx) a02yyuw: sensor locked after 9 bytes (acquisition discarded: cks_err=0 sync_skip=1 line_err=0)
+I (xxx) a02yyuw: sensor locked after 9 bytes; discarded during acquisition: 0 checksum errors, 1 sync skips, 0 line errors
 I (xxx) wt: distance_mm=1234 status=OK age_ms=42 ok=10 cks_err=0 sync_skip=0 uart_ovf=0 rx_bytes=40 line_err=0
 ...
 W (xxx) wt: sensor data lost: no valid frame for > 1000 ms (check wiring, RX/TX pins)

@@ -255,8 +255,8 @@ class HaLinesTest(unittest.TestCase):
         self.assertEqual(res.verdict, cl.FAIL)
 
 
-LOCKED = ("I (%d) a02yyuw: sensor locked after 9 bytes"
-          " (acquisition discarded: cks_err=1 sync_skip=1 line_err=0)")
+LOCKED = ("I (%d) a02yyuw: sensor locked after 9 bytes; discarded during acquisition:"
+          " 1 checksum errors, 1 sync skips, 0 line errors")
 
 
 def target_run(n, t0=1330, dist=300, ok0=10):
