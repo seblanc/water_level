@@ -64,6 +64,13 @@ Last updated: run #3, IMPLEMENTATION phase (attempt 5), 2026-10-17.
 - [x] Recorded Build #4: **blocked** at `git push`, but with a new error. The 403 is gone (M4e/M4f write access appears fixed). GitHub now refuses the push because the PAT has no `workflow` scope and the history contains `.github/workflows/nostromo-build.yml` (F-18, G15). Nothing was compiled, and no source files changed
 - [ ] Operator: give the CI token workflow rights. Classic PAT: tick the `workflow` scope. Fine-grained PAT: "Workflows: Read and write". Alternatively, push the current history once with a credential that has workflow rights. Then re-trigger the build
 
+### M4h — Run #3 implementation (attempt 6; documentation only)
+- [x] Recorded Build #5 (`d587225`, IDF v5.4.2): **compile + link succeeded** (`water_tank.bin` 0x35210 bytes, 79 % of the app partition free). The `workflow`-scope push problem (F-18) is resolved
+- [x] Identified the job failure: the post-build packaging step `git rev-parse HEAD` hits git "dubious ownership" inside the root container (F-19, G16). This is a workflow issue, not a compile error, so there are no source changes
+- [x] Resolved G4/G13 (IDF v5.4.2; artifact layout read from the workflow file, read-only). F-01/F-10 and the ≥ v5.3 branch of F-12 are build-confirmed
+- [ ] Operator: in `.github/workflows/nostromo-build.yml` step "Package binaries and build evidence", add `git config --global --add safe.directory "$GITHUB_WORKSPACE"` before `git rev-parse HEAD` (or write `${{ github.sha }}` instead). Then re-trigger the build, which should upload `nostromo-firmware-<id>`
+- [ ] Next phase: if the full CI log becomes available, scan it for warnings from `components/` and `main/` (V-01 "no warnings" criterion)
+
 ### M5 — Build and bench verification (needs a toolchain and hardware; operator or a bench-enabled phase)
 Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRIX.md:
 
@@ -71,8 +78,9 @@ Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRI
 Build #1 was blocked by the dirty worktree (F-15, G12). The platform has since committed
 the tree (`65c6ad9`, `3e2dc04`), and it is expected to commit this phase's changes as well.
 Builds #2 and #3 then failed at `git push` with HTTP 403 (F-17, G14). Build #4 got past the
-403 but was rejected because the token has no `workflow` scope (F-18, G15). The CI token needs
-both write access and workflow rights before V-01 can run.
+403 but was rejected because the token has no `workflow` scope (F-18, G15). Build #5 got through
+push and compile, then failed in the workflow's packaging step (F-19, G16), and V-01 is
+still open until that workflow step is fixed.
 
 0. [ ] V-04 wiring inspection **before power-up** (sensor TX → GPIO16; F-13)
 1. [ ] V-09 `make -C test/host run`, and V-09b `python3 test/bench/test_check_log.py`

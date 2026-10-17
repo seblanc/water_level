@@ -4,10 +4,19 @@ The ACCEPTANCE spec is empty (revision 1) and there are no structured requiremen
 The requirements and acceptance criteria below are **derived** from PURPOSE, FLASHING and
 TELEMETRY revision 1. They are **proposals that need operator confirmation** (gap G6).
 
-**No check below has been executed.** Every result is `NOT VERIFIED` (or `DEFERRED`):
-there is no real evidence for any of them. Firmware source and host tests exist. Nothing
-has been compiled, flashed, run, or measured. The only analysis done is static review by
-reading the code (SYSTEM_ARCHITECTURE.md §7.2).
+**Only one check has partial evidence:** V-01 compile step (CI Build #5, see the results
+log). Every other result is `NOT VERIFIED` (or `DEFERRED`). Nothing has been flashed, run,
+or measured, and the host tests have not been executed.
+
+Run #3, IMPLEMENTATION phase (attempt 6), 2026-10-17: GitHub Actions Build #5 (commit
+`d587225`, image `espressif/idf:v5.4.2`) **compiled and linked the firmware**:
+`[1004/1004]`, "Project build complete", `water_tank.bin` 0x35210 bytes (79 % of the
+0x100000 app partition free). The job still **failed**, in the workflow step after the
+build ("Package binaries and build evidence"). There, `git rev-parse HEAD` exits 128 with
+"fatal: detected dubious ownership in repository at '/__w/water_level/water_level'" (F-19,
+G16). That step belongs to the platform workflow, outside `source/`, and is not a firmware
+compile error. No artifacts were uploaded. Source files are unchanged in this phase,
+because the visible log shows no compile error to fix.
 
 Run #3, IMPLEMENTATION phase (attempt 5), 2026-10-17: GitHub Actions Build #4 was
 **blocked** at `git push` with a new error. The 403 is gone, but GitHub refused the push
@@ -81,7 +90,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | Check | Req | Method | Procedure | Pass criterion | Needs | Result |
 |-------|-----|--------|-----------|----------------|-------|--------|
-| V-01 | R-01 | Build (GitHub Actions) | Commit `source/`, then the CI build runs (equivalent to `idf.py set-target esp32 && idf.py build`) | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version (and so which F-12 branch, `driver` or `esp_driver_*`, was exercised) and the artifact list | Clean committed worktree + CI with IDF v5.x | NOT VERIFIED (Builds #1–#4 blocked, see the results log) |
+| V-01 | R-01 | Build (GitHub Actions) | Commit `source/`, then the CI build runs (equivalent to `idf.py set-target esp32 && idf.py build`) | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version (and so which F-12 branch, `driver` or `esp_driver_*`, was exercised) and the artifact list | Clean committed worktree + CI with IDF v5.x | **PARTIAL** (Build #5): compile + link OK on IDF v5.4.2 (`esp_driver_*` branch of F-12), `water_tank.bin` produced. Job FAILED afterwards in the platform packaging step (F-19), so no artifacts. "No warnings from project sources" not confirmable: the supplied log excerpt starts at step 960/1004. Builds #1–#4 blocked |
 | V-02 | R-02 | Bench | `idf.py -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 flash`, or from the CI `build/` artifacts: `python -m esptool --chip esp32 -p <port> write_flash @flash_args` | esptool prints "Hash of data verified" for each segment and the board resets into the app | Board + USB | NOT VERIFIED |
 | V-03 | R-03 | Bench / log (auto: `check_log.py --check v03`) | Sensor connected; `idf.py -p <port> monitor`, capture to a file | Banner shows `rx_gpio=16 tx_gpio=17 baud=9600`; within 2 s, `status=OK` lines appear with `ok=` increasing. On failure, record `rx_bytes`/`line_err` (README troubleshooting table) | Board + sensor | NOT VERIFIED |
 | V-03b | R-07 | Bench / log (auto: `--check v03b`) | Boot with the sensor **disconnected** | Banner printed; one `sensor data lost` warning; `status=NO_DATA distance_mm=-1 age_ms=-1 ok=0` lines at 1 Hz; no reboot | Board | NOT VERIFIED |
@@ -120,7 +129,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED | CI Build #1 was blocked (worktree not committed, F-15). Builds #2 and #3 were blocked (git push 403, F-17). Build #4 was blocked because the PAT has no `workflow` scope (F-18, G15). No compilation yet (V-01). No host compiler for V-09/V-09b |
+| AC-1 | NOT VERIFIED | Build half: Build #5 compiled and linked without errors on IDF v5.4.2, but the CI job failed in packaging (F-19), and project-source warnings cannot be checked from the truncated log. Host half: V-09/V-09b never executed (no host compiler). Earlier: Build #1 blocked (F-15), #2/#3 (403, F-17), #4 (`workflow` scope, F-18) |
 | AC-2 | NOT VERIFIED | No hardware access (V-02) |
 | AC-3 | NOT VERIFIED | Needs board + sensor + log capture (V-03, V-05); pin direction G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Needs tape measure and target (V-06); tolerance is an assumption |
@@ -137,5 +146,6 @@ All six criteria are also still **proposals** (G6) until the operator confirms t
 | 2026-10-16 | V-01 | GitHub Actions Build #2 (commit "pending") | **BLOCKED**, not executed. Push to the CI repository was refused, so the source was not compiled. Neither a pass nor a fail | Builder message: "remote: Permission to seblanc/water_level.git denied to seblanc. ... The requested URL returned error: 403" |
 | 2026-10-17 | V-01 | GitHub Actions Build #3 (commit "pending") | **BLOCKED**, not executed. Same 403 on `git push` as Build #2, so the credentials were not changed between builds. Not compiled. Neither a pass nor a fail | Builder message: "remote: Permission to seblanc/water_level.git denied to seblanc. fatal: unable to access 'https://github.com/seblanc/water_level.git/': The requested URL returned error: 403" |
 | 2026-10-17 | V-01 | GitHub Actions Build #4 (commit "pending") | **BLOCKED**, not executed. The 403 is gone, but the remote rejected the ref update because the token has no `workflow` scope. Not compiled. Neither a pass nor a fail | Builder message: "! [remote rejected] HEAD -> main (refusing to allow a Personal Access Token to create or update workflow `.github/workflows/nostromo-build.yml` without `workflow` scope)" |
+| 2026-10-17 | V-01 | GitHub Actions Build #5 (commit `d587225`, `espressif/idf:v5.4.2`) | **Compile + link PASSED; CI job FAILED** (post-build packaging step, F-19). The firmware image was produced but not uploaded. Not a full V-01 pass | CI log: "[1004/1004] … Project build complete", "water_tank.bin binary size 0x35210 bytes. Smallest app partition is 0x100000 bytes. 0xcadf0 bytes (79%) free.", then "fatal: detected dubious ownership in repository at '/__w/water_level/water_level'" → "Process completed with exit code 128". Project objects built: `a02yyuw.c`, `a02yyuw_parser.c`, `a02yyuw_filter.c`, `level_report.c`, `level_report_uart.c`, `main.c` |
 
 No other check has been executed.
