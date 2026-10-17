@@ -30,8 +30,10 @@ Status history:
   result as #5. Compile and link succeeded with the same image size, then packaging failed on
   "dubious ownership" (F-19). The workflow file still lacks the `safe.directory` fix
   (read-only check). No source changes.
+- Run #3, IMPLEMENTATION phase (attempt 8, 2026-10-17): CI Build #7 (`d11d329`) failed on F-19
+  for the third time. The workflow is still unchanged, and there are no source changes.
 
-**Compiled in CI only (Build #5). Nothing has been flashed or tested on hardware.** No agent
+**Compiled in CI only (Builds #5–#7). Nothing has been flashed or tested on hardware.** No agent
 phase so far had a shell, a toolchain, or bench access. Hardware facts below either come from the project
 specs or are marked **[ASSUMPTION]** / **[DATASHEET-RECALL]**. The second marker means
 general knowledge of the part that has not been checked against a supplied document (no

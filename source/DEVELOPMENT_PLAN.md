@@ -76,6 +76,11 @@ Last updated: run #3, IMPLEMENTATION phase (attempt 5), 2026-10-17.
 - [x] Read-only check: `.github/workflows/nostromo-build.yml` still runs `git rev-parse HEAD` (lines 53, 97) without `safe.directory`, so the M4h operator item has not been applied yet
 - [ ] Operator (same as M4h, still open, **blocking**): apply the workflow fix **before** re-triggering. Without it, every build fails the same way regardless of the source
 
+### M4j — Run #3 implementation (attempt 8; documentation only)
+- [x] Recorded Build #7 (`d11d329`): the third identical F-19 failure. The build step reached the post-build flash hint, then packaging failed on "dubious ownership". No source changes
+- [x] Read-only check: workflow lines 53/97 are still unchanged
+- [ ] Operator (**blocking**, unchanged since M4h): add `git config --global --add safe.directory "$GITHUB_WORKSPACE"` as the first command in both `run:` blocks that call `git rev-parse HEAD` (lines 53 and 97), or replace those calls with `echo "${{ github.sha }}"`. Further agent attempts cannot change the outcome until this is done
+
 ### M5 — Build and bench verification (needs a toolchain and hardware; operator or a bench-enabled phase)
 Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRIX.md:
 
