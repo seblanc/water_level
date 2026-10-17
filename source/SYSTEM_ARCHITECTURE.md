@@ -5,7 +5,9 @@ Last updated: run #9, ARCHITECTURE phase (attempt 2), 2026-10-17.
 **Run #9 new input:** `specifications/verification.md` **revision 3** (platform commit
 `dcf9f13`). It is the first operator-defined pass bar. It was not in the phase prompt's
 spec list, and was found by reading the project directory. Analysis and design: §4.2.
-Plan: DEVELOPMENT_PLAN.md M8a.
+Plan: DEVELOPMENT_PLAN.md M8a. **Run #9 implementation (attempts 3–4): M8a is written**
+(driver rebase §4.2.3, check `v15` §4.2.4). It has not been compiled yet. The next CI
+build is the first one with it.
 
 **Evidence state.** The firmware **has been compiled in CI** (GitHub Actions, `espressif/idf:v5.4.2`).
 Build #5 compiled and linked Stage 1, and Build #8 (`43e0382`) completed and uploaded the
@@ -317,7 +319,7 @@ measurements must be between 10 and 60 cm, with no reported communication errors
 | at least 10 | ≥ 10 such lines, i.e. a capture of ≥ ~12 s at the 1 s period |
 | between 10 and 60 cm | `100 ≤ distance_mm ≤ 600` on **every** report line from the first `OK` line onward. A NO_DATA or OUT_OF_RANGE line after the first OK is a failure |
 | no reported communication errors | `cks_err=0`, `line_err=0`, `uart_ovf=0` on **every** report line. There is no `sensor data lost` warning after the first OK. `sync_skip` is a resynchronisation counter, not an error, but it also reads 0 after M8a (§4.2.2) |
-| (tolerated) | Report lines with `status=NO_DATA` **before** the first OK, if the first OK comes ≤ 2 s after the banner (the same bound as V-03). One `sensor data lost` warning before the first OK (F-34) |
+| (tolerated) | Report lines with `status=NO_DATA` **before** the first OK, if the first OK comes ≤ 3 s after the banner. One `sensor data lost` warning before the first OK (F-34). (Run #9 impl: the bound was 2 s, the same as V-03. It is 3 s because the first report comes ~1 s after the banner, so one leading NO_DATA line puts the first OK just past 2 s) |
 
 #### 4.2.2 Risks in the current firmware (static analysis, nothing measured)
 
@@ -379,7 +381,7 @@ discarded, so nothing is hidden.
   any tag (`Log.errors: List[Tuple[int, str]]`). Today only `wt` events are kept, so this
   is a new list. Existing checks do not use it.
 - `check_v15(log, expect_rx, expect_tx, min_valid=10, lo_mm=100, hi_mm=600,
-  first_ok_max_ms=2000)` applies §4.2.1 to `log.main`:
+  first_ok_max_ms=3000)` applies §4.2.1 to `log.main` (3000, see the "tolerated" row):
   - PASS when every rule holds.
   - INCONCLUSIVE when there is no banner, or no rule fails but there are fewer than 10
     valid lines.
@@ -812,7 +814,7 @@ with the §8 rule, and evaluates:
 | V-10 | Final `cks_err/ok` < 1 %, `uart_ovf` = 0; span ≥ 10 min | — |
 | V-11 | `age_ms` of the first `NO_DATA` line ≤ 2000; warning/recovery messages; recovery without reboot | Replug → `OK` latency |
 | V-12 | One boot segment; no crash/reset text after the banner; monotonic timestamps; run ≥ 1 h | — |
-| V-15 (planned, M8a) | Spec rev 3 rules of §4.2.1: ≥ 10 fresh `OK` lines, all 100–600 mm, error counters 0, no `E` line | Target at 10–60 cm (G25) |
+| V-15 (M8a, written) | Spec rev 3 rules of §4.2.1: ≥ 10 fresh `OK` lines, all 100–600 mm, error counters 0, no `E` line | Target at 10–60 cm (G25) |
 
 Verdicts: PASS / FAIL / INCONCLUSIVE (exit 0 / 1 / 3). The script assumes the default log
 timestamp format `(<ms>)` (`CONFIG_LOG_TIMESTAMP_SOURCE_RTOS`). It has not been run.
@@ -838,15 +840,16 @@ distance_mm=<int|-1> status=<OK|NO_DATA|OUT_OF_RANGE> age_ms=<int|-1> ok=<u32> c
 ```
 Future fields must only be appended.
 
-Counter origin: `ok`, `rx_bytes` and `uart_ovf` count from boot. **After M8a** (§4.2.3),
+Counter origin: `ok`, `rx_bytes` and `uart_ovf` count from boot. Since M8a (§4.2.3),
 `cks_err`, `sync_skip` and `line_err` count from the first valid frame ("lock"); before
-lock they show the raw values. Until M8a lands, all count from boot.
+lock they show the raw values. Images built before M8a (Build #11 and older) count all
+of them from boot.
 
 **Event lines:**
 - `W wt: sensor data lost: no valid frame for > <stale_ms> ms (check wiring, RX/TX pins)`
 - `I wt: sensor data available`
 - `W a02yyuw: UART FIFO|ring buffer overflow, input flushed`
-- `I a02yyuw: sensor locked after <n> bytes (acquisition discarded: cks_err=<n> sync_skip=<n> line_err=<n>)` (once per boot; **after M8a**)
+- `I a02yyuw: sensor locked after <n> bytes (acquisition discarded: cks_err=<n> sync_skip=<n> line_err=<n>)` (once per boot; images with M8a only)
 - `E a02yyuw: ... not usable ...` / `RX and TX GPIO must differ` (invalid configuration, followed by an abort)
 - Stage 2 (tag `ha`), as written in `ha_mqtt.c` / `ha_config.c`:
   - `I ha: wifi connected ip=<ip>`

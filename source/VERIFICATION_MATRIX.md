@@ -18,6 +18,13 @@ The fix (counter rebase at first frame) and check `v15` are planned as DEVELOPME
 M8a. There is no new builder result: Build #11 is still the latest. **No check result
 changed. Nothing was compiled, executed or measured in this phase.**
 
+Run #9, IMPLEMENTATION phase (attempts 3–4): **M8a written**. `a02yyuw.c` rebases
+`cks_err`/`sync_skip`/`line_err` at the first valid frame and logs the discarded counts
+once; `check_log.py` gained `Log.errors` and `--check v15`; `test_check_log.py` gained
+class `V15Test` (2 PASS, 4 FAIL, 1 INCONCLUSIVE case, plus a `CHECKS` membership test).
+The tolerated first-OK bound is 3 s, not the 2 s of the architecture draft (§4.2.1).
+**Not compiled, not executed.** The next CI build is the first with M8a.
+
 **Only one check has evidence:** V-01, the CI build. Build #9 (`c804544`) is the first
 build with Stage 2 (`ha_mqtt`, `CONFIG_WT_HA_ENABLE=y`) compiled in. It completed and its
 artifact was uploaded. Builds #10 (`d240242`) and #11 (`9be93a0`, the latest) also
@@ -140,7 +147,7 @@ flashing steps (§4.1).
 | R-08e | `esp_wifi_set_storage(WIFI_STORAGE_RAM)`, password never logged, `.gitignore` entries, placeholder `tools/nvs_config.example.csv`; empty Kconfig credential defaults | CI-compiled (Build #9); repo/artifact grep not done |
 | R-08f | Depth-1 overwrite queue + prio-3 publisher in `ha_mqtt.c`; console sink registered first | CI-compiled (Build #9) |
 | R-09 | — (planned: DEVELOPMENT_PLAN.md M7a) | Not implemented |
-| R-10 | Existing: report line (`main.c`, `level_report_uart.c`), range check (`a02yyuw_distance_in_range`), counters (`a02yyuw.c`). Planned (M8a): counter rebase in `a02yyuw.c`, `check_v15` in `test/bench/check_log.py` | Report path CI-compiled. **M8a not implemented** |
+| R-10 | Existing: report line (`main.c`, `level_report_uart.c`), range check (`a02yyuw_distance_in_range`), counters (`a02yyuw.c`). M8a (run #9): counter rebase in `a02yyuw.c`, `check_v15` in `test/bench/check_log.py` | Report path CI-compiled. **M8a written, not yet compiled** |
 
 ## Verification checks
 
@@ -163,7 +170,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-11 | R-07 | Fault injection (partly auto: `--check v11`) | Disconnect the sensor TX wire for ~5 s, then reconnect | One `sensor data lost`; `NO_DATA` within ≤ 2 s; `sensor data available` + `OK` within ≤ 2 s of reconnect (manual timing); no reboot | Board + sensor | NOT VERIFIED |
 | V-12 | R-01..R-07 | Stability (auto: `--check v12`) | Run ≥ 1 h | No `Guru Meditation`, `abort()`, `Task watchdog`, `Brownout detector`, or new `rst:` after the banner; monotonic timestamps | Board + sensor | NOT VERIFIED |
 | V-14 | R-03 | Bench / config | `WT_SENSOR_RX_GPIO=6`, build, flash, observe; then restore 16 | `E a02yyuw: RX GPIO6 is not a usable input ...` then abort/reboot; no silent hang. Optional | Board | NOT VERIFIED |
-| V-15 | R-10 (AC-VS3) | Bench / log (auto after M8a: `check_log.py --check v15`) | Flat rigid target ~30 cm, square to the beam (or water surface at 10–60 cm). HA **not provisioned** (G24, F-31). Open the monitor (resets the board) and capture ≥ 20 s from reset. Use an artifact built after M8a | One banner with `rx_gpio=16 tx_gpio=17 baud=9600`; no crash text, no `E` line after it. ≥ 10 `status=OK` lines with increasing `ok=`. From the first OK on: every line `OK` with 100 ≤ `distance_mm` ≤ 600; `cks_err=0 line_err=0 uart_ovf=0` on every line; no `sensor data lost` after the first OK. Tolerated: `NO_DATA` lines and one `sensor data lost` before the first OK, which must come ≤ 2 s after the banner (F-34). Full rules: SYSTEM_ARCHITECTURE.md §4.2.1 | Board + sensor + 10–60 cm target (G25) | NOT VERIFIED (M8a not implemented) |
+| V-15 | R-10 (AC-VS3) | Bench / log (auto after M8a: `check_log.py --check v15`) | Flat rigid target ~30 cm, square to the beam (or water surface at 10–60 cm). HA **not provisioned** (G24, F-31). Open the monitor (resets the board) and capture ≥ 20 s from reset. Use an artifact built after M8a | One banner with `rx_gpio=16 tx_gpio=17 baud=9600`; no crash text, no `E` line after it. ≥ 10 `status=OK` lines with increasing `ok=`. From the first OK on: every line `OK` with 100 ≤ `distance_mm` ≤ 600; `cks_err=0 line_err=0 uart_ovf=0` on every line; no `sensor data lost` after the first OK. Tolerated: `NO_DATA` lines and one `sensor data lost` before the first OK, which must come ≤ 3 s after the banner (F-34). Full rules: SYSTEM_ARCHITECTURE.md §4.2.1 | Board + sensor + 10–60 cm target (G25) | NOT VERIFIED (M8a written run #9, not yet compiled; checker and self-tests never run) |
 | V-13a | R-08a, R-08e | Log + repo inspection | Flash a CI image with HA compiled in, NVS not provisioned; run V-03/V-05 | Exactly one `ha: disabled (...)` line; V-03/V-05 verdicts as with Build #8; no `wifi` lines. Repo/artifact grep finds no SSID or password | Board + sensor | NOT VERIFIED (ready: the Build #9/#10/#11 artifacts have HA compiled in; use #11) |
 | V-13b | R-08 | Log | Provision NVS (§5.3), reboot | `ha: enabled id=wt_xxxxxx ...`, `wifi connected ip=...`, `mqtt connected` within 30 s | Board, Wi-Fi AP, broker | DEFERRED |
 | V-13c | R-08b | HA UI + `mosquitto_sub -v -t 'watertank/#' -t 'homeassistant/#'` | After V-13b | Retained discovery configs present; device "Water tank" with a "Distance" entity (mm) in HA; state updates every ~10 s and matches the UART `distance_mm` | Broker, HA | DEFERRED |
@@ -202,7 +209,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | AC-7 | NOT VERIFIED | Code is CI-compiled (Build #9). Still needs NVS provisioning (§5.3) plus Wi-Fi, a broker and HA (G5) |
 | AC-8 | NOT VERIFIED | As AC-7, plus AP/broker fault injection |
 
-| **AC-VS3** | NOT VERIFIED | M8a (counter rebase + `check_v15`) not implemented; then CI build, V-09b, and V-15 on hardware with a 10–60 cm target (G25) |
+| **AC-VS3** | NOT VERIFIED | M8a (counter rebase + `check_v15`) written, not compiled; needs a CI build, V-09b, and V-15 on hardware with a 10–60 cm target (G25) |
 
 AC-1…AC-8 are still **proposals** (G6) until the operator confirms them. AC-VS3 is
 operator-defined (verification spec rev 3).
