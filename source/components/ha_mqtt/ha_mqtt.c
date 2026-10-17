@@ -25,8 +25,6 @@
 /* Below the reporter (4) and sensor RX (5) tasks: network work never delays them. */
 #define HA_TASK_PRIO          3
 #define HA_TASK_STACK         4096
-#define HA_RETRY_MIN_S        1
-#define HA_RETRY_MAX_S        60
 #define HA_MQTT_KEEPALIVE_S   30
 #define HA_MQTT_RECONNECT_MS  10000
 #define HA_ENTITY_COUNT       2
@@ -46,11 +44,9 @@ static char s_disc_payload[HA_ENTITY_COUNT][HA_DISCOVERY_MAX];
 
 static QueueHandle_t s_queue;
 static esp_mqtt_client_handle_t s_client;
-static esp_timer_handle_t s_retry_timer;
 static bool s_started;
 
-/* Event loop / esp_timer task only. */
-static uint32_t s_retry_delay_s = HA_RETRY_MIN_S;
+/* Event loop task only. */
 static bool s_mqtt_started;
 
 /* Set by the MQTT event handler, read by the wt_ha task. */
@@ -148,74 +144,21 @@ static void publisher_task(void *arg)
     }
 }
 
-/* ---- Wi-Fi reconnect (event loop and esp_timer task context) ---- */
+/* ---- Wi-Fi is owned by wt_wifi (run #12); MQTT starts on the first IP ---- */
 
-/*
- * Arm the one-shot reconnect timer with the current delay, then double it (1 -> 60 s).
- * Returns the delay in s, or 0 if no new retry was armed (one already pending, or the
- * timer failed): the backoff only advances when the timer really starts (F-25).
- */
-static uint32_t schedule_reconnect(void)
-{
-    uint32_t delay_s = s_retry_delay_s;
-    esp_err_t err = esp_timer_start_once(s_retry_timer, (uint64_t)delay_s * 1000000ULL);
-    if (err != ESP_OK) {
-        if (err != ESP_ERR_INVALID_STATE) {
-            ESP_LOGE(TAG, "reconnect timer: %s", esp_err_to_name(err));
-        }
-        return 0;
-    }
-    s_retry_delay_s = (delay_s >= HA_RETRY_MAX_S / 2) ? HA_RETRY_MAX_S : delay_s * 2;
-    return delay_s;
-}
-
-static void try_connect(void)
-{
-    esp_err_t err = esp_wifi_connect();
-    if (err != ESP_OK) {
-        uint32_t delay_s = schedule_reconnect();
-        if (delay_s > 0) {
-            ESP_LOGW(TAG, "wifi connect failed (%s), retry in %" PRIu32 " s",
-                     esp_err_to_name(err), delay_s);
-        } else {
-            ESP_LOGW(TAG, "wifi connect failed (%s), retry pending", esp_err_to_name(err));
-        }
-    }
-}
-
-static void retry_timer_cb(void *arg)
+static void on_got_ip(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
-    try_connect();
-}
-
-static void on_net_event(void *arg, esp_event_base_t base, int32_t id, void *data)
-{
-    (void)arg;
-    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
-        try_connect();
-    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-        const wifi_event_sta_disconnected_t *ev = data;
-        int reason = ev != NULL ? (int)ev->reason : -1;
-        uint32_t delay_s = schedule_reconnect();
-        if (delay_s > 0) {
-            ESP_LOGW(TAG, "wifi disconnected reason=%d, retry in %" PRIu32 " s", reason,
-                     delay_s);
+    (void)base;
+    (void)id;
+    (void)data;
+    if (!s_mqtt_started) {
+        /* After the first start, esp-mqtt reconnects on its own. */
+        esp_err_t err = esp_mqtt_client_start(s_client);
+        if (err == ESP_OK) {
+            s_mqtt_started = true;
         } else {
-            ESP_LOGW(TAG, "wifi disconnected reason=%d, retry pending", reason);
-        }
-    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
-        const ip_event_got_ip_t *ev = data;
-        s_retry_delay_s = HA_RETRY_MIN_S;
-        ESP_LOGI(TAG, "wifi connected ip=" IPSTR, IP2STR(&ev->ip_info.ip));
-        if (!s_mqtt_started) {
-            /* After the first start, esp-mqtt reconnects on its own. */
-            esp_err_t err = esp_mqtt_client_start(s_client);
-            if (err == ESP_OK) {
-                s_mqtt_started = true;
-            } else {
-                ESP_LOGE(TAG, "mqtt start failed: %s", esp_err_to_name(err));
-            }
+            ESP_LOGE(TAG, "mqtt start failed: %s", esp_err_to_name(err));
         }
     }
 }

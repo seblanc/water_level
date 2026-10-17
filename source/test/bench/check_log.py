@@ -469,6 +469,10 @@ def check_v15(log: Log, expect_rx: int, expect_tx: int, min_valid: int = 10, lo_
     r.details.append("valid readings: %d (need %d), distance_mm min=%s max=%s (limits %d..%d)"
                      % (valid, min_valid, min(dists) if dists else None, max(dists) if dists else None,
                         lo_mm, hi_mm))
+    # Spec rev 4: report the mean distance of the readings from the first OK onward.
+    r.details.append("mean distance: %s" % ("%.1f mm (%.2f cm, n=%d)"
+                                            % (sum(dists) / len(dists), sum(dists) / len(dists) / 10.0,
+                                               len(dists)) if dists else "n/a (no readings)"))
     if offenders:
         r.details.append("offending lines: %d, first: %s" % (len(offenders), offenders[0]))
         for o in offenders[1:5]:
