@@ -1,6 +1,6 @@
 # SYSTEM ARCHITECTURE — Water Tank Level (project 1a95ca931d72)
 
-Last updated: run #7, ARCHITECTURE phase (attempt 1), 2026-10-17.
+Last updated: run #8, ARCHITECTURE phase (attempt 1), 2026-10-17.
 
 **Evidence state.** The firmware **has been compiled in CI** (GitHub Actions, `espressif/idf:v5.4.2`).
 Build #5 compiled and linked Stage 1, and Build #8 (`43e0382`) completed and uploaded the
@@ -28,7 +28,9 @@ document (no reference documents were provided).
 | #6 impl (attempts 1–3, `c804544`) | M6a steps 5–10 written (CMake, Kconfig, `sdkconfig.defaults`, `main` hook, CSV, `.gitignore`, README, `HaLinesTest`), plus the F-25/F-26 fixes |
 | #6 arch | No new builder result (Build #8 is still the latest); the source tree is unchanged since `7bac3ea`. Second read-only pass over the never-compiled Stage 2 code, this time against the IDF v5.4.2 API and the `-Werror=all` flags (§5.10.4): **no new compile blocker found**. One new runtime finding (F-31, console noise from esp-mqtt during broker outages). The M6a plan is confirmed unchanged |
 | #6 review (attempt 4) | **Build #9 (`c804544`) completed**: Stage 2 compiles and links. The static review of the HA code found no defect that needs a change. Image size and warnings are not in the excerpt. No hardware or host-test evidence |
-| **#7 arch (this phase)** | No new builder result (Build #9 is still the latest; `9ecc02d` changed docs only). Stale "to write / open" markers from the pre-Build-#9 state removed (§3.2, §5.10, §6, §7.2, §7.3). New inference: Build #9 passing implies the Stage 2 app fits the 1.5 MB partition (§5.8). A third read-only pass over `ha_mqtt.c` / `main.c` found no defect. Optional next increment designed: tank level percentage (§5.11, M7a, needs G8). **The firmware is feature-complete for both stated goals; the project is now blocked on operator bench work (M5, M6b), not on code** |
+| #7 arch | No new builder result (Build #9 is still the latest; `9ecc02d` changed docs only). Stale "to write / open" markers from the pre-Build-#9 state removed (§3.2, §5.10, §6, §7.2, §7.3). New inference: Build #9 passing implies the Stage 2 app fits the 1.5 MB partition (§5.8). A third read-only pass over `ha_mqtt.c` / `main.c` found no defect. Optional next increment designed: tank level percentage (§5.11, M7a, needs G8). **The firmware is feature-complete for both stated goals; the project is now blocked on operator bench work (M5, M6b), not on code** |
+| #7 impl / review | No code change. **Build #10 (`d240242`) completed**: a docs-only delta over Build #9, so it compiled the same firmware. Artifact `nostromo-firmware-10` |
+| **#8 arch (this phase)** | Inputs unchanged since the #7 review: Build #10 is still the latest result and is already recorded; no spec revision, operator guidance or tank geometry (G8). The architecture is confirmed unchanged. The only edits point the operator steps (§4.1, G23, M5) at the newest artifact `nostromo-firmware-10`. No source change |
 
 Earlier per-attempt detail is preserved in git history (commits `65c6ad9` … `bacd2c8`).
 
@@ -257,7 +259,7 @@ A02YYUW --9600 8N1--> GPIO16 / UART2 --ISR, 512 B ring--> event queue --> RX tas
 | Aspect | Spec / bench | Architectural decision |
 |--------|--------------|------------------------|
 | Build | Adapter `esp_idf`, target `esp32`, backend GitHub Actions (automatic) | Native IDF project at `source/`. CI runs `idf.py -C source set-target esp32 build` in `espressif/idf:v5.4.2`. It builds **committed files only** and uses `sdkconfig.defaults`, because `sdkconfig` is git-ignored. As a result, **CI builds never contain Wi-Fi/MQTT credentials** (§5.3) |
-| Programming (CI artifact) | CI uploads `nostromo-firmware-<id>` | See §4.1. Build #8's artifact is the **Stage 1 baseline**. Retention is 30 days, so it should expire around 2026-11-16 **[ASSUMPTION: counted from the 2026-10-17 upload]** |
+| Programming (CI artifact) | CI uploads `nostromo-firmware-<id>` | See §4.1. Build #8's artifact is the **Stage 1-only baseline**. **Build #10's artifact (`d240242`) is the current one**: Stage 1 + Stage 2, with HA staying off until NVS is provisioned. Retention is 30 days, so both should expire around 2026-11-16 **[ASSUMPTION: counted from the 2026-10-17 uploads]** |
 | Programming (local) | FLASHING rev 1: "Flash over USB". Bench: USB-Serial (CH340) at `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` | `idf.py -p <port> flash`. esptool enters download mode automatically via DTR/RTS. Fall back to `-b 115200` if the CH340 link is unreliable. Hold BOOT on clones without auto-reset circuitry |
 | Runtime telemetry | TELEMETRY rev 1: "UART logs". Bench: UART @115200 on the same port | UART0 console at 115200, `ESP_LOG` (INFO). Machine-parseable `key=value` report line at 1 Hz, tag `wt`. Contract in §8. Stage 2 keeps this line unchanged; HA is an additional sink, not a replacement |
 | Port sharing | Flash and log use one port | Flashing and monitoring cannot run at the same time. Close the monitor before flashing (`idf.py flash monitor` sequences them). Opening the port may reset the board through DTR/RTS |
@@ -276,6 +278,7 @@ writes `flash_args` into `build/` with paths relative to that directory, so:
 ```
 unzip nostromo-firmware-8.zip -d fw8 && cd fw8
 cat source-commit.txt                    # expect 43e03828b63949c8c75de83f00ffe9b5f43b76b1
+# Current Stage 1+2 image: use nostromo-firmware-10.zip / fw10; source-commit.txt should read d24024299f19f75a53656872e8cb404440848e95
 grep -v ' \./SHA256SUMS$' SHA256SUMS | sha256sum -c --quiet
 cd build
 python -m esptool --chip esp32 -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 \
@@ -619,7 +622,7 @@ same reasoning as for the credentials (§5.3).
 | G18 | 2.4 GHz coverage at the tank (new) | Adequate RSSI | Frequent reconnects, gaps in HA | `ha` log lines show disconnect reasons. Optional RSSI field later |
 | G20 | Why run #4 implementation attempt 2 was recorded as failed (run #5) | Phase ended before steps 5–10; no build was triggered (no builder result after Build #8) | If the failure was a build error on a pushed commit, its log is missing here | Operator/platform supplies the failure reason or a CI log for `7bac3ea` if one exists |
 | G21 | Will IDF ignore `components/ha_mqtt/` without `CMakeLists.txt`? (run #5) | — | — | **Moot**: the CMake file exists since run #6 (Build #9) |
-| G23 | Exact Stage 2 image size and the compiler warning scan (run #7) | App ≤ 1.5 MB (inferred from Build #9 passing the size check, §5.8); no project warnings (with `-Werror=all`, only non-`-Wall` warnings could pass silently) | Little TLS/OTA headroom; hidden warnings | Full CI log or `build/water_tank.bin` from `nostromo-firmware-9` |
+| G23 | Exact Stage 2 image size and the compiler warning scan (run #7) | App ≤ 1.5 MB (inferred from Build #9 passing the size check, §5.8); no project warnings (with `-Werror=all`, only non-`-Wall` warnings could pass silently) | Little TLS/OTA headroom; hidden warnings | Full CI log, or `build/water_tank.bin` from `nostromo-firmware-10` (same firmware sources as -9) |
 | G22 | Why run #5 architecture (`bba5d98`) was recorded as failed (run #6) | Platform-side outcome; the deliverables it wrote are present and consistent with the tree | If a doc defect caused it, it is not identifiable from the tree | Operator/platform supplies the reason |
 | G19 | Bundled `mqtt` component in future IDF versions | Present in v5.4.2 | Build break on IDF ≥ 6 if it is moved to the component registry **[ASSUMPTION]** | CI pins v5.4.2; revisit on an IDF upgrade |
 

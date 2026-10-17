@@ -9,7 +9,14 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #7, REVIEW phase (attempt 3), 2026-10-17.
+Last updated: run #8, ARCHITECTURE phase (attempt 1), 2026-10-17.
+
+**Run #8 architecture:** inputs are unchanged since the run #7 review. There is no new
+builder result (Build #10 is still the latest, already recorded), no spec revision, no
+operator guidance and no tank geometry (G8). The plan is unchanged. **The next
+implementation phase falls under rule (c)**: review/doc only, then stop early, unless a
+defect report or G8 arrives first. M5 now names `nostromo-firmware-10` as the artifact to
+flash.
 
 **Run #7 review:** Build #10 (`d240242`) completed. It is a docs-only delta over Build #9,
 so it compiled the same firmware again. No defect was found, and there was no source
@@ -45,6 +52,7 @@ implementation phase should not change firmware behaviour on speculation.** Allo
 - [x] Run #4: **Stage 2 design** (SYSTEM_ARCHITECTURE.md §5): MQTT + HA discovery, runtime gating, NVS provisioning, topics/payloads, task model, reconnect policy, resource budget, new gaps G17–G19
 - [x] Run #5: static review of the partial Stage 2 code from `7bac3ea` (SYSTEM_ARCHITECTURE.md §5.10, F-22…F-30); build-gating decisions for the remaining steps (§5.10.2); §8 event lines updated (F-28)
 - [x] Run #6: compile-surface pass over the Stage 2 sources against IDF v5.4 APIs and warning flags (SYSTEM_ARCHITECTURE.md §5.10.4). No new blocker; F-31 (esp-mqtt console noise) recorded as accepted. M6a below is unchanged
+- [x] Run #8: inputs unchanged; architecture confirmed; artifact references moved to `nostromo-firmware-10`
 - [x] Run #7: stale pre-Build-#9 markers cleaned up; app ≤ 1.5 MB inferred from Build #9 (§5.8, G23); publisher/connect logic re-checked (F-32, no defect); M7a (level %) designed (§5.11)
 - [ ] Operator confirms or corrects G1 (pin direction), G2 (module type), G5 (broker/HA setup), G6 (acceptance criteria AC-1…AC-8), G8 (tank empty/full distances)
 
@@ -64,9 +72,9 @@ implementation phase should not change firmware behaviour on speculation.** Allo
 
 ### M5 — Stage 1 bench verification (operator; needs hardware)
 Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRIX.md.
-Use **Build #9's artifact** (`nostromo-firmware-9`; HA is compiled in but stays off until
-NVS is provisioned, so the expected output is Stage 1 plus one `ha: disabled` line). If
-Build #9 shows problems, fall back to Build #8's artifact (Stage 1 only, available until
+Use **Build #10's artifact** (`nostromo-firmware-10`, `d240242`; same firmware sources as
+Build #9). HA is compiled in but stays off until NVS is provisioned, so the expected
+output is Stage 1 plus one `ha: disabled` line. If it shows problems, fall back to Build #8's artifact (Stage 1 only, available until
 about 2026-11-16).
 
 0. [ ] V-04 wiring inspection **before power-up** (sensor TX → GPIO16; F-13)
