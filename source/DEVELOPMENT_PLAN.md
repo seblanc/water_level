@@ -9,7 +9,15 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #9, REVIEW phase (attempt 6), 2026-10-17.
+Last updated: run #10, IMPLEMENTATION phase (attempt 1), 2026-10-17.
+
+**Run #10 implementation:** the operator asked to "do verification" (2026-10-17T19:18Z). There
+is no new builder result (Build #12, `84dfcb1`, completed). There is no defect report, and
+`specifications/verification.md` is still rev 3. So under rules (c)/(d) there is **no firmware
+change**: the firmware sources are the ones Build #12 compiled. This phase only prepares the
+orchestrator's flash + UART verification. The pass bar is V-15 (M5 step 9), and the
+log-reading guide is VERIFICATION_MATRIX.md "Run #10: reading a capture against spec rev 3".
+Nothing was compiled, flashed or measured in this phase.
 
 **Run #9 review:** Build #12 (`84dfcb1`) completed, so the M8a firmware change is
 CI-compiled. A static review against §4.2.3 found no defect. One residual risk, F-35, is

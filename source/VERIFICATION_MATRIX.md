@@ -11,6 +11,32 @@ with no reported communication errors."* It is tracked as R-10 / **AC-VS3** / **
 below. Only its operational reading (SYSTEM_ARCHITECTURE.md §4.2.1) is an interpretation
 (G24).
 
+Run #10, IMPLEMENTATION phase (attempt 1), 2026-10-17: operator guidance "do verification".
+There is no source change: the firmware is the one Build #12 compiled (`84dfcb1`), and spec
+rev 3 is unchanged. Physical verification is scheduled by the orchestrator after this phase.
+**No check result changed. Nothing was compiled, flashed or measured in this phase.**
+
+### Run #10: reading a capture against spec rev 3 (for the UART verifier)
+Bench "Simple UART": flash and log both use `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0`,
+console 115200. Capture ≥ 20 s from reset with HA **not** provisioned. Expected sequence
+(full rules: SYSTEM_ARCHITECTURE.md §4.2.1, check V-15):
+1. Boot: one banner line with `rx_gpio=16 tx_gpio=17 baud=9600`, then one `ha: disabled (...)`
+   line. No `Guru Meditation`/`abort()`/`rst:` after the banner and no `E (` line.
+2. Possibly one `NO_DATA` line and one `sensor data lost` before the sensor locks (tolerated,
+   F-34). Then one `I a02yyuw: sensor locked after N bytes (acquisition discarded: ...)` line
+   (informational; it is not a reported communication error).
+3. One `I wt: distance_mm=<d> status=OK ... ok=<n> cks_err=0 sync_skip=<s> uart_ovf=0 ...
+   line_err=0` line per second. Units are **mm**, so the spec's 10–60 cm is
+   **100 ≤ `distance_mm` ≤ 600**. PASS needs ≥ 10 such lines with increasing `ok=`, all in
+   range, and `cks_err`, `line_err` and `uart_ovf` = 0 on every line from the first OK.
+   `sync_skip` is not an error counter (§4.2.1).
+4. Automated verdict: `python3 test/bench/test_check_log.py` (V-09b) first, then
+   `python3 test/bench/check_log.py <capture> --check v15`.
+
+Failure hints: `ok=0` with `rx_bytes=0` points to wiring or pins (G1, F-13). `distance_mm`
+outside 100–600 means the target is not at 10–60 cm (G25), not a firmware fault. Non-zero
+counters only on a pre-lock line are F-35: look at the `sensor locked` line and repeat once.
+
 Run #9, ARCHITECTURE phase (attempts 1–2), 2026-10-17: spec rev 3 analysed. Static
 analysis of `a02yyuw.c` shows the boot-cumulative error counters can record start-up
 alignment as `cks_err`/`line_err` (F-33). V-15 could then fail with no real fault.
