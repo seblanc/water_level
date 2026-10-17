@@ -132,6 +132,7 @@ h1 { font-size: 1.6rem; margin: 0; letter-spacing: .02em; }
 .chart-card { margin-top: 18px; }
 .chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .chart-head h2 { font-size: 1rem; margin: 0; color: var(--muted); font-weight: 600; }
+.chart-head .count { font-weight: 400; font-size: .85rem; margin-left: 6px; }
 .range button {
     background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 8px;
     padding: 4px 10px; margin-left: 4px; cursor: pointer; font: inherit; font-size: .85rem;
@@ -182,7 +183,7 @@ footer { color: var(--muted); font-size: .78rem; text-align: center; margin-top:
 
     <section class="card chart-card">
         <div class="chart-head">
-            <h2>Level history</h2>
+            <h2>Level history <span id="count" class="count"></span></h2>
             <div class="range" id="range">
                 <button data-h="24" class="on">24 h</button><button data-h="168">7 d</button><button data-h="720">30 d</button>
             </div>
@@ -217,6 +218,9 @@ footer { color: var(--muted); font-size: .78rem; text-align: center; margin-top:
         var L = state.latest, badge = $('badge'), tank = $('tank');
         $('foot').textContent = 'Empty = ' + state.empty_cm + ' cm · Full = ' + state.full_cm +
             ' cm (sensor to water surface)';
+        /* Readings stored by post.php in the selected period: shows the ESP32 uploads arriving. */
+        $('count').textContent = typeof state.count === 'number' ?
+            '· ' + state.count + ' reading' + (state.count === 1 ? '' : 's') + ' received' : '';
         if (!state.ok) {
             badge.className = 'badge bad'; badge.textContent = 'server error';
             return;

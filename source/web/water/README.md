@@ -40,7 +40,10 @@ curl -i -X POST https://randoresto.ch/water/post.php \
   -d age_ms=50 -d frames_ok=100 -d checksum_err=0 -d rssi=-60 -d uptime_s=120 -d fw=test
 ```
 
-Expected reply: `{"ok":true,"level_pct":50.0}` (PHP 7.1+; older PHP prints `50`). Wrong key → 401, missing/invalid field → 400,
+Expected reply: `{"ok":true,"id":<new row id>,"rows":<rows in table>,"level_pct":50.0}`
+(PHP 7.1+; older PHP prints `50`). The firmware only counts a post as delivered when the
+reply contains `"ok":true`, and logs the `id`/`rows` values. The page header of the history
+chart shows how many readings arrived in the selected period. Wrong key → 401, missing/invalid field → 400,
 database problem → 500 (details in the server's PHP error log).
 Delete test rows afterwards (`DELETE FROM water_readings WHERE device='0123456789ab'`).
 

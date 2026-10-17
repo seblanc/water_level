@@ -120,9 +120,12 @@ Server side: copy `web/water/` to the web host. Setup, database and page details
 no reflash needed.
 
 Console lines: `web: enabled device=<mac> url=… key=set period_ms=60000`, then
-`web: post ok (http 200)`. On errors you see `web: post failed: <err>` (network/TLS) or
-`web: post rejected: http <code>`: 401 = API key mismatch, 404 = wrong URL,
-5xx = server/database. The key and the Wi-Fi password are never logged.
+`web: post ok: http 200, stored as row <id>, <n> rows in table` (at most one per period;
+the row id comes from the server, so it proves the database stored the reading). On errors
+you see `web: post failed: <err>` (network/TLS), `web: post rejected: http <code>`
+(3xx = URL redirects, 401 = API key mismatch, 404 = wrong URL, 5xx = server/database) or
+`web: post rejected: http 200 but the reply is not from post.php` (hosting error page or
+PHP not executed). One W line per outage; retries every 15 s. The key and the Wi-Fi password are never logged.
 
 **Credentials in `sdkconfig.defaults`:** at the operator's request, the Wi-Fi SSID and
 password and the web API key are in `sdkconfig.defaults` so that CI artifacts work
