@@ -255,6 +255,61 @@ class HaLinesTest(unittest.TestCase):
         self.assertEqual(res.verdict, cl.FAIL)
 
 
+LOCKED = ("I (%d) a02yyuw: sensor locked after 9 bytes"
+          " (acquisition discarded: cks_err=1 sync_skip=1 line_err=0)")
+
+
+def target_run(n, t0=1330, dist=300, ok0=10):
+    """n fresh OK lines with the target inside the spec rev 3 window (100..600 mm)."""
+    return [report(t0 + i * 1000, dist, "OK", 42, ok0 + 10 * i) for i in range(n)]
+
+
+class V15Test(unittest.TestCase):
+    def check(self, lines):
+        return cl.check_v15(cl.parse_log(lines), 16, 17)
+
+    def test_pass_clean(self):
+        res = self.check(BANNER + HA_DISABLED + [LOCKED % 335] + target_run(12))
+        self.assertEqual(res.verdict, cl.PASS, res.details)
+
+    def test_pass_leading_no_data(self):
+        lines = (BANNER + HA_DISABLED + [LOST % 1329, report(1330, -1, "NO_DATA", -1, 0, rx=0),
+                                         LOCKED % 1500] + target_run(12, t0=2330))
+        res = self.check(lines)
+        self.assertEqual(res.verdict, cl.PASS, res.details)
+
+    def test_checksum_error_fails(self):
+        lines = target_run(12)
+        lines[6] = report(1330 + 6 * 1000, 300, "OK", 42, 70, cks=1)
+        res = self.check(BANNER + lines)
+        self.assertEqual(res.verdict, cl.FAIL)
+
+    def test_out_of_window_fails(self):
+        lines = target_run(12)
+        lines[4] = report(1330 + 4 * 1000, 605, "OK", 42, 50)
+        res = self.check(BANNER + lines)
+        self.assertEqual(res.verdict, cl.FAIL)
+
+    def test_no_data_after_first_ok_fails(self):
+        lines = target_run(6) + [report(7330, -1, "NO_DATA", 1100, 60)] + target_run(6, t0=8330, ok0=70)
+        res = self.check(BANNER + lines)
+        self.assertEqual(res.verdict, cl.FAIL)
+
+    def test_error_line_fails(self):
+        lines = BANNER + target_run(6) + ["E (7000) ha: mqtt start failed: ESP_FAIL"] + \
+            target_run(6, t0=7330, ok0=70)
+        res = self.check(lines)
+        self.assertEqual(res.verdict, cl.FAIL)
+
+    def test_nine_lines_inconclusive(self):
+        res = self.check(BANNER + target_run(9))
+        self.assertEqual(res.verdict, cl.INCONCLUSIVE, res.details)
+
+    def test_not_in_default_checks(self):
+        self.assertIn("v15", cl.CHECKS)
+        self.assertNotIn("v15", cl.DEFAULT_CHECKS)
+
+
 class MainTest(unittest.TestCase):
     def test_exit_codes(self):
         import tempfile

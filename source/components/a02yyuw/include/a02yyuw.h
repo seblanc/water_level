@@ -37,6 +37,13 @@ typedef struct {
     bool     in_range;      /* distance_mm within A02YYUW_MIN_MM..A02YYUW_MAX_MM */
 } a02yyuw_sample_t;
 
+/*
+ * Counter origins: frames_ok, uart_overflows and bytes_rx count from boot.
+ * checksum_err, sync_skips and line_errors count from the first valid frame
+ * ("lock"); before lock they hold the raw counts from boot. The counts
+ * discarded at lock are logged once ("sensor locked after ..."). There is no
+ * re-lock after a sensor dropout.
+ */
 typedef struct {
     uint32_t frames_ok;
     uint32_t checksum_err;

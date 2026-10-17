@@ -57,6 +57,7 @@ I (xxx) wt: idf=v5.x chip_rev=v3.0 cores=2 flash=4MB
 I (xxx) wt: sensor=A02YYUW uart=2 rx_gpio=16 tx_gpio=17 baud=9600
 I (xxx) wt: report_period_ms=1000 stale_ms=1000 median_window=1
 I (xxx) a02yyuw: UART2 @9600 8N1, rx=GPIO16 tx=GPIO17, median_window=1
+I (xxx) a02yyuw: sensor locked after 9 bytes (acquisition discarded: cks_err=0 sync_skip=1 line_err=0)
 I (xxx) wt: distance_mm=1234 status=OK age_ms=42 ok=10 cks_err=0 sync_skip=0 uart_ovf=0 rx_bytes=40 line_err=0
 ...
 W (xxx) wt: sensor data lost: no valid frame for > 1000 ms (check wiring, RX/TX pins)
@@ -72,6 +73,12 @@ This sample shows the intended format. It was not captured from hardware.
 | `age_ms` | Age of the newest valid frame; `-1` if none was ever received |
 | `ok` / `cks_err` / `sync_skip` / `uart_ovf` | Cumulative counters: valid frames, checksum failures, bytes skipped while resyncing, UART overflows |
 | `rx_bytes` / `line_err` | Cumulative raw bytes received on the sensor UART, and UART framing/parity errors |
+
+Counter origin: `ok`, `rx_bytes` and `uart_ovf` count from boot. `cks_err`, `sync_skip` and
+`line_err` count from the first valid frame (the `sensor locked` line). Joining the
+sensor's stream mid-frame at boot is not a link fault, so those counts are reset there.
+They are logged once in the `sensor locked` line, so nothing is hidden. Before the first
+valid frame, these three counters show the raw counts.
 
 ### Troubleshooting with the counters
 
@@ -161,7 +168,7 @@ This needs a host C compiler. The tests have not been run yet.
 ## Bench log checker (offline, reads a capture file)
 
 `test/bench/check_log.py` (Python 3.7+, standard library only) checks a captured console
-log against the verification-matrix criteria V-03, V-03b, V-05, V-10, V-11 and V-12.
+log against the verification-matrix criteria V-03, V-03b, V-05, V-10, V-11, V-12 and V-15.
 
 ```sh
 # Capture: in `idf.py monitor`, press Ctrl+T then Ctrl+L to toggle logging to a file,
@@ -169,8 +176,23 @@ log against the verification-matrix criteria V-03, V-03b, V-05, V-10, V-11 and V
 python3 test/bench/check_log.py capture.log                    # V-03 V-05 V-10 V-12
 python3 test/bench/check_log.py unplug.log --check v11
 python3 test/bench/check_log.py nosensor.log --check v03b --check v12
+python3 test/bench/check_log.py target30cm.log --check v15     # verification spec rev 3
 python3 test/bench/test_check_log.py                           # self-tests (synthetic logs)
 ```
+
+**V-15 (verification spec rev 3):** point the sensor at a flat, rigid target about 30 cm
+away, square to the beam, with nothing else in the beam cone. A water surface 10–60 cm
+away also works. HA must not be provisioned. Open the monitor, which resets the board,
+and capture at least 20 s from the reset. Then run `--check v15`. It passes when all of
+these hold:
+- exactly one banner, with the expected pins;
+- no crash text and no `E` line from any tag;
+- the first `OK` comes within 3 s of the banner;
+- at least 10 fresh `OK` readings;
+- every line from the first `OK` onward is `OK` at 100–600 mm;
+- `cks_err`, `line_err` and `uart_ovf` are 0 on every line.
+
+One `NO_DATA` line and one `sensor data lost` warning before the first `OK` are tolerated.
 
 Exit status: `0` all PASS, `1` any FAIL, `3` INCONCLUSIVE (for example a capture that is
 too short for the check). The checker and its self-tests have not been run yet.

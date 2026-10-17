@@ -2,14 +2,16 @@
 """Offline checker for water_tank console logs.
 
 Applies the telemetry contract (SYSTEM_ARCHITECTURE.md section 8) and the pass
-criteria of VERIFICATION_MATRIX.md checks V-03, V-03b, V-05, V-10, V-11 and
-V-12 to a log file captured on the bench. It only reads a file (or stdin); it
-never opens a serial port or touches hardware.
+criteria of VERIFICATION_MATRIX.md checks V-03, V-03b, V-05, V-10, V-11, V-12
+and V-15 (verification spec rev 3, SYSTEM_ARCHITECTURE.md section 4.2) to a log
+file captured on the bench. It only reads a file (or stdin); it never opens a
+serial port or touches hardware.
 
 Usage:
     python3 test/bench/check_log.py capture.log                 # default: v03 v05 v10 v12
     python3 test/bench/check_log.py capture.log --check v11
     python3 test/bench/check_log.py nosensor.log --check v03b --check v12
+    python3 test/bench/check_log.py target30cm.log --check v15  # >= 20 s from reset
 
 Exit status: 0 = all requested checks PASS, 1 = at least one FAIL,
 3 = no FAIL but at least one INCONCLUSIVE (e.g. capture too short).
@@ -75,6 +77,7 @@ class Boot:
 class Log:
     boots: List[Boot] = field(default_factory=list)
     failures: List[Tuple[int, str]] = field(default_factory=list)  # after the first banner
+    errors: List[Tuple[int, str]] = field(default_factory=list)  # E lines, any tag, after the first banner
 
     @property
     def main(self) -> Optional[Boot]:
@@ -120,6 +123,8 @@ def parse_log(lines: Iterable[str]) -> Log:
         if not m:
             continue
         level, t_ms, tag, message = m.group(1), int(m.group(2)), m.group(3), m.group(4)
+        if log.banners > 0 and level == "E":
+            log.errors.append((line_no, line.strip()))
 
         if current is None:
             if tag != REPORT_TAG:
@@ -364,7 +369,117 @@ def check_v12(log: Log, min_span_ms: int = 3600000) -> Result:
     return r
 
 
-CHECKS = ("v03", "v03b", "v05", "v10", "v11", "v12")
+def check_v15(log: Log, expect_rx: int, expect_tx: int, min_valid: int = 10, lo_mm: int = 100,
+              hi_mm: int = 600, first_ok_max_ms: int = 3000) -> Result:
+    """Verification spec rev 3 as read in SYSTEM_ARCHITECTURE.md section 4.2.1 (G24).
+
+    Boots correctly, >= min_valid fresh OK readings, every reading from the first OK
+    onward within lo_mm..hi_mm, and no reported communication errors on any line.
+    first_ok_max_ms is 3000, not V-03's 2000: the first report comes ~1 s after the
+    banner, so one tolerated leading NO_DATA line (F-34) puts the first OK just past 2 s.
+    """
+    r = Result("V-15", PASS)
+    boot = log.main
+    if boot is None or boot.banner_line is None:
+        return Result("V-15", INCONCLUSIVE, ["no firmware banner in the capture"])
+
+    verdicts = []
+    offenders: List[str] = []
+
+    def offend(line_no: int, why: str) -> None:
+        verdicts.append(FAIL)
+        offenders.append("line %d: %s" % (line_no, why))
+
+    # Boots correctly.
+    verdicts.append(PASS if log.banners == 1 else FAIL)
+    r.details.append("banners in capture: %d (expected 1)" % log.banners)
+    rx, tx, baud = banner_value(boot, "rx_gpio"), banner_value(boot, "tx_gpio"), banner_value(boot, "baud")
+    verdicts.append(PASS if (rx, tx, baud) == (expect_rx, expect_tx, 9600) else FAIL)
+    r.details.append("banner rx_gpio=%s tx_gpio=%s baud=%s (expected %d/%d/9600)"
+                     % (rx, tx, baud, expect_rx, expect_tx))
+    for line_no, text in log.failures:
+        offend(line_no, "crash/reset text: %s" % text[:100])
+    for line_no, text in log.errors:
+        offend(line_no, "error line: %s" % text[:100])
+
+    # No reported communication errors, on every report line.
+    maxima = {"cks_err": 0, "line_err": 0, "uart_ovf": 0, "sync_skip": 0}
+    for rep in boot.reports:
+        for key in maxima:
+            v = rep.num(key)
+            if v is None:
+                offend(rep.line_no, "report line lacks %s" % key)
+                continue
+            maxima[key] = max(maxima[key], v)
+            if key != "sync_skip" and v != 0:
+                offend(rep.line_no, "%s=%d" % (key, v))
+    r.details.append("counter maxima: cks_err=%d line_err=%d uart_ovf=%d sync_skip=%d (sync_skip is"
+                     " informational)" % (maxima["cks_err"], maxima["line_err"], maxima["uart_ovf"],
+                                          maxima["sync_skip"]))
+
+    # First OK within first_ok_max_ms of the banner; NO_DATA before it is tolerated.
+    first_idx = next((i for i, x in enumerate(boot.reports) if x.status == "OK"), None)
+    lost = [e for e in boot.events if e.message.startswith("sensor data lost")]
+    if first_idx is None:
+        last_t = boot.reports[-1].t_ms if boot.reports else boot.banner_t_ms
+        waited = None if last_t is None or boot.banner_t_ms is None else last_t - boot.banner_t_ms
+        if waited is not None and waited > first_ok_max_ms:
+            verdicts.append(FAIL)
+            r.details.append("no status=OK line within %d ms of the banner (%d report lines)"
+                             % (first_ok_max_ms, len(boot.reports)))
+        else:
+            verdicts.append(INCONCLUSIVE)
+            r.details.append("no status=OK line yet; capture too short")
+        valid, dists = 0, []
+    else:
+        first = boot.reports[first_idx]
+        delay = first.t_ms - boot.banner_t_ms if boot.banner_t_ms is not None else None
+        verdicts.append(PASS if delay is not None and delay <= first_ok_max_ms else FAIL)
+        r.details.append("first OK at line %d, %s ms after the banner (limit %d ms)"
+                         % (first.line_no, delay, first_ok_max_ms))
+
+        early_lost = [e for e in lost if e.line_no < first.line_no]
+        late_lost = [e for e in lost if e.line_no > first.line_no]
+        if len(early_lost) > 1:
+            offend(early_lost[1].line_no, "more than one 'sensor data lost' warning before the first OK")
+        for e in late_lost:
+            offend(e.line_no, "'sensor data lost' after the first OK")
+
+        # Every line from the first OK onward must be an in-range OK reading.
+        valid, dists, prev_ok, stuck = 0, [], None, []
+        for rep in boot.reports[first_idx:]:
+            dist = rep.num("distance_mm")
+            if rep.status != "OK":
+                offend(rep.line_no, "status=%s after the first OK" % rep.status)
+                continue
+            if dist is None or not lo_mm <= dist <= hi_mm:
+                offend(rep.line_no, "distance_mm=%s outside %d..%d" % (dist, lo_mm, hi_mm))
+            if dist is not None:
+                dists.append(dist)
+            ok = rep.num("ok")
+            if ok is not None and ok > 0 and (prev_ok is None or ok > prev_ok):
+                valid += 1
+                prev_ok = ok
+            else:
+                stuck.append(rep.line_no)
+        if stuck:
+            r.details.append("OK lines not counted (ok counter not increasing): %d (lines %s)"
+                             % (len(stuck), stuck[:5]))
+
+    r.details.append("valid readings: %d (need %d), distance_mm min=%s max=%s (limits %d..%d)"
+                     % (valid, min_valid, min(dists) if dists else None, max(dists) if dists else None,
+                        lo_mm, hi_mm))
+    if offenders:
+        r.details.append("offending lines: %d, first: %s" % (len(offenders), offenders[0]))
+        for o in offenders[1:5]:
+            r.details.append("  %s" % o)
+    if valid < min_valid:
+        verdicts.append(INCONCLUSIVE)
+    r.verdict = worst(verdicts)
+    return r
+
+
+CHECKS = ("v03", "v03b", "v05", "v10", "v11", "v12", "v15")
 DEFAULT_CHECKS = ("v03", "v05", "v10", "v12")
 
 
@@ -383,6 +498,8 @@ def run_checks(log: Log, checks: Iterable[str], args: argparse.Namespace) -> Lis
             results.append(check_v11(log))
         elif c == "v12":
             results.append(check_v12(log))
+        elif c == "v15":
+            results.append(check_v15(log, args.rx_gpio, args.tx_gpio))
     return results
 
 

@@ -1,5 +1,6 @@
 #include "a02yyuw.h"
 
+#include <inttypes.h>
 #include <string.h>
 
 #include "a02yyuw_filter.h"
@@ -29,6 +30,9 @@ static struct {
     a02yyuw_parser_t parser;
     a02yyuw_filter_t filter;
     int64_t          last_frame_us;  /* 0 = no frame yet */
+    bool             locked;         /* first valid frame seen (never cleared) */
+    uint32_t         cks_base;       /* parser counters at lock, 0 before it */
+    uint32_t         sync_base;
 
     /* Shared, guarded by s_lock. */
     bool             have_sample;
@@ -70,19 +74,43 @@ static void on_frame(uint16_t raw_mm)
 
 static void handle_bytes(const uint8_t *data, size_t len)
 {
+    bool just_locked = false;
+
     for (size_t i = 0; i < len; i++) {
         uint16_t mm;
         if (a02yyuw_parser_feed(&s_ctx.parser, data[i], &mm)) {
+            /* First valid frame: errors so far came from joining the stream mid-frame (F-33). */
+            if (!s_ctx.locked) {
+                s_ctx.locked = true;
+                s_ctx.cks_base = s_ctx.parser.checksum_err;
+                s_ctx.sync_base = s_ctx.parser.sync_skips;
+                just_locked = true;
+            }
             on_frame(mm);
         }
     }
 
+    uint32_t line_err_discarded = 0;
+    uint32_t bytes_rx;
+
+    /* Bases are 0 until lock, so the raw counts are published before it. */
     taskENTER_CRITICAL(&s_lock);
+    if (just_locked) {
+        line_err_discarded = s_ctx.stats.line_errors;
+        s_ctx.stats.line_errors = 0;
+    }
     s_ctx.stats.frames_ok = s_ctx.parser.frames_ok;
-    s_ctx.stats.checksum_err = s_ctx.parser.checksum_err;
-    s_ctx.stats.sync_skips = s_ctx.parser.sync_skips;
+    s_ctx.stats.checksum_err = s_ctx.parser.checksum_err - s_ctx.cks_base;
+    s_ctx.stats.sync_skips = s_ctx.parser.sync_skips - s_ctx.sync_base;
     s_ctx.stats.bytes_rx += (uint32_t)len;
+    bytes_rx = s_ctx.stats.bytes_rx;
     taskEXIT_CRITICAL(&s_lock);
+
+    if (just_locked) {
+        ESP_LOGI(TAG, "sensor locked after %" PRIu32 " bytes (acquisition discarded: cks_err=%"
+                 PRIu32 " sync_skip=%" PRIu32 " line_err=%" PRIu32 ")",
+                 bytes_rx, s_ctx.cks_base, s_ctx.sync_base, line_err_discarded);
+    }
 }
 
 static void rx_task(void *arg)
