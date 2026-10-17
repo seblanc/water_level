@@ -11,6 +11,33 @@ with no reported communication errors."* It is tracked as R-10 / **AC-VS3** / **
 below. Only its operational reading (SYSTEM_ARCHITECTURE.md §4.2.1) is an interpretation
 (G24).
 
+Run #16, REVIEW phase (attempt 4), 2026-10-17: **Build #16 (`063d391`, current HEAD,
+clean worktree) completed** (artifact `nostromo-firmware-16`, 35935147 B, 1372 files). It is
+the first build with the run #16 firmware change: `web_report.c` captures the reply body
+and counts a post as delivered only when `web_payload_parse_reply()` finds `"ok":true`.
+It then logs `web: post ok: http 200, stored as row <id>, <n> rows in table`. That line has no
+`key=value` tokens, so the F-36 rule still holds. Static review of `web_report.c`,
+`web_payload.c/.h`, `test_web_payload.c`, `post.php`, `db.php`, `api.php` and `index.php`
+found no defect that needs a code change:
+- I traced the `test_parse_reply` cases by hand against `json_value()`, including
+  `{"error":"ok","ok":false}` and negative or non-numeric `id`/`rows`. All give the
+  expected result. **The test was not executed.**
+- The field contract is unchanged. `post.php` replies `ok`/`id`/`rows`/`level_pct`, which
+  matches `web_reply_t`.
+- Wave loop: the front path has a 100-unit period and the back path a 200-unit period,
+  in a 400-unit viewBox. The SVG is 200 % of the tank width, so `translateX(-50%)` moves it
+  200 units, a whole number of periods for both waves. The loop therefore has no seam (on
+  paper). Under reduced motion, `animation: none` also overrides the `.back` longhands.
+- Residual risk (documented, not changed): the firmware keeps only the first 191 reply
+  bytes. If the host prints PHP notices or HTML before the JSON, the `"ok"` key can fall
+  outside that window. The firmware would then log `post rejected: http 200 but the reply
+  is not from post.php` even though the row was stored. If V-16g shows this, check the
+  server error display settings first.
+- Doc fix: V-16c expected the pre-run-16 reply. It now expects `id`/`rows`.
+
+**PHP has still never been executed. Build #16 has not been flashed. V-16f/g/h, V-15 and
+every runtime check stay NOT VERIFIED.**
+
 Run #14, REVIEW phase (attempt 9), 2026-10-17: **Build #15 (`f3fc197`, current HEAD)
 completed** (artifact `nostromo-firmware-15`, 35918416 B, 1372 files). It is the first
 build with the F-36 fix: the once-per-boot `sensor locked` line no longer contains
@@ -237,7 +264,7 @@ flashing steps (§4.1).
 | R-08e | `esp_wifi_set_storage(WIFI_STORAGE_RAM)`, password never logged, `.gitignore` entries, placeholder `tools/nvs_config.example.csv`; empty Kconfig credential defaults | CI-compiled (Build #9); repo/artifact grep not done |
 | R-08f | Depth-1 overwrite queue + prio-3 publisher in `ha_mqtt.c`; console sink registered first | CI-compiled (Build #9) |
 | R-09 | — (planned: DEVELOPMENT_PLAN.md M7a) | Not implemented |
-| R-11 | `components/wt_wifi/*` (shared STA, backoff 1→60 s), `components/web_report/*` (form POST over HTTPS + CA bundle, 60 s period, 15 s retry), `sdkconfig.defaults` (SSID/password, URL, API key), `main/main.c`; server: `web/water/*.php`, `.htaccess`; `test/host/test_web_payload.c` | Firmware CI-compiled (Build #15, `f3fc197`, includes all run #14 edits); PHP never executed (no PHP runtime in any phase); host test never run |
+| R-11 | `components/wt_wifi/*` (shared STA, backoff 1→60 s), `components/web_report/*` (form POST over HTTPS + CA bundle, 60 s period, 15 s retry), `sdkconfig.defaults` (SSID/password, URL, API key), `main/main.c`; server: `web/water/*.php`, `.htaccess`; `test/host/test_web_payload.c` | Firmware CI-compiled (Build #15, `f3fc197`, includes all run #14 edits; Build #16, `063d391`, adds the run #16 reply parsing); PHP never executed (no PHP runtime in any phase); host test never run |
 | R-10 | Existing: report line (`main.c`, `level_report_uart.c`), range check (`a02yyuw_distance_in_range`), counters (`a02yyuw.c`). M8a (run #9): counter rebase in `a02yyuw.c`, `check_v15` in `test/bench/check_log.py` | Report path and M8a rebase CI-compiled (Build #12, `84dfcb1`). `check_v15` and its self-tests never run |
 
 ## Verification checks
@@ -270,8 +297,8 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-13f | R-08d | Fault injection | Restart the broker / HA | `mqtt disconnected` → `mqtt connected`; discovery and availability republished; entity recovers without a device reboot | Broker | DEFERRED |
 | V-13g | R-08f | Log (auto: `--check v05`, `--check v12`) | Provisioned and connected: capture ≥ 60 s (V-05) and ≥ 1 h (V-12) | Same pass criteria as V-05 / V-12; no `Brownout detector`; `cks_err` rate as in V-10 (G17). Record the `wt_ha` stack high-water mark if logged | Board, sensor, Wi-Fi, broker | DEFERRED |
 | V-16a | R-11 (run #14) | Host unit test | `make -C test/host run` | `./test_web_payload` prints `<N> checks, 0 failures` and exits 0 | Host C compiler | NOT VERIFIED (never run) |
-| V-16b | R-11 | CI build | Committed run #14 tree (`e600560` or later) → CI | Build succeeds with `WT_WEB_ENABLE=y`, `wt_wifi`, `esp_http_client` and the certificate bundle; image fits the 1.5 MB app partition | CI | **PASS except warning scan / size** (Build #14, `eeca1a6`, and Build #15, `f3fc197`: CI jobs completed and artifacts uploaded, so compile, link and the partition size check passed. Build #15 includes the run #14 review edits to `web_report.c` and `a02yyuw.c`. Exact image size and warnings not in the excerpts) |
-| V-16c | R-11 | Server | Upload `web/water/`, set `db_dsn`/credentials in `config.php`, run the `curl` test in `web/water/README.md` | `{"ok":true,"level_pct":50.0}` (`50` on PHP < 7.1); wrong key → 401; the page shows the reading | Web host, DB | NOT VERIFIED (operator action) |
+| V-16b | R-11 | CI build | Committed run #14 tree (`e600560` or later) → CI | Build succeeds with `WT_WEB_ENABLE=y`, `wt_wifi`, `esp_http_client` and the certificate bundle; image fits the 1.5 MB app partition | CI | **PASS except warning scan / size** (Build #14, `eeca1a6`, and Build #15, `f3fc197`: CI jobs completed and artifacts uploaded, so compile, link and the partition size check passed. Build #15 includes the run #14 review edits to `web_report.c` and `a02yyuw.c`; Build #16, `063d391`, adds the run #16 reply parsing. Exact image size and warnings not in the excerpts) |
+| V-16c | R-11 | Server | Upload `web/water/`, set `db_dsn`/credentials in `config.php`, run the `curl` test in `web/water/README.md` | `{"ok":true,"id":<n>,"rows":<n>,"level_pct":50.0}` since run #16 (`50` on PHP < 7.1); wrong key → 401; the page shows the reading | Web host, DB | NOT VERIFIED (operator action) |
 | V-16d | R-11 | Log + server | Flash a run #14 image; capture ≥ 2 min | `web: enabled … key=set`, Wi-Fi gets an IP on `weefee`, `web: post ok (http 200)` within 60 s of the IP; a new row about every 60 s; the page level matches (30 − distance_cm)/25 × 100 %. 1 Hz UART lines unchanged (V-05 still passes) | Board, sensor, AP, server | NOT VERIFIED |
 | V-16e | R-11 | Fault injection | Stop the AP or rename `post.php` for 3 min, then restore | One `post failed`/`post rejected` W line per outage start (not one per retry); no `E` lines from HTTP/TLS; posts resume without a reboot; UART report continues at 1 Hz | AP / server control | NOT VERIFIED |
 | V-16f | R-11 (run #16) | Host unit test | `make -C test/host run` | `test_parse_reply` checks pass: `"ok":true` accepted with/without `id`/`rows`; `"ok":false`, HTML pages, empty/NULL bodies rejected | Host C compiler | NOT VERIFIED (never run) |
@@ -310,7 +337,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | AC-7 | NOT VERIFIED | Code is CI-compiled (Build #9). Still needs NVS provisioning (§5.3) plus Wi-Fi, a broker and HA (G5) |
 | AC-8 | NOT VERIFIED | As AC-7, plus AP/broker fault injection |
 
-| AC-WEB (run #14) | NOT VERIFIED | V-16b passed in CI (Builds #14, #15) except warning scan/size. V-16a, V-16c–V-16e: no host test, server deployment or hardware run yet; tank limits 30/5 cm are provisional |
+| AC-WEB (run #14) | NOT VERIFIED | V-16b passed in CI (Builds #14, #15, #16) except warning scan/size. V-16a, V-16c–V-16h: no host test, server deployment or hardware run yet; tank limits 30/5 cm are provisional |
 | **AC-VS3** | NOT VERIFIED | M8a firmware part CI-compiled (Build #12). Still needs V-09b (host Python) and V-15 on hardware with a 10–60 cm target (G25) |
 
 AC-1…AC-8 are still **proposals** (G6) until the operator confirms them. AC-VS3 is
@@ -336,6 +363,7 @@ operator-defined (verification spec rev 3).
 | 2026-10-17 | V-01, V-16b | Build #14 (`eeca1a6`, first build with `wt_wifi`, `web_report`, `WT_WEB_ENABLE=y` and the CA bundle) | **CI job COMPLETED**. Run #14 firmware compiles, links and fits the app partition (implied by the uploaded artifact). Warning scan and image size not in the excerpt. Compilation evidence only | "Artifact nostromo-firmware-14 has been successfully uploaded! Final size is 35918562 bytes. Artifact ID is 12113824428"; zip SHA256 `a04121ee5cfd978147ff184bbd6109fac50ab3818de1b3933ea59ac2d942579c`; 1372 files |
 | 2026-10-17 | Platform UART verification #4 (Flash #2; the image is not named in the report, most likely Build #14) | Hardware, 12 sample lines, 4402 bytes | **FAILED**. Only `line_err equals 0` failed, with "Unparseable line_err=0)". The status, distance, `cks_err`, `uart_ovf` and `sync_skip` checks passed on 11–12 samples. The fault is in the log format (F-36), not in the sensor link | Evidence SHA-256 `74bddc02f2fbb5718b1a904b42cc7657ee95540ce3aa3d95bf8f081b51d91812`; 45 decode replacements (boot ROM noise). Fixed in source at run #14 attempt 7; compiled in Build #15, not reflashed yet |
 | 2026-10-17 | V-01, V-16b | Build #15 (`f3fc197`, first build with the F-36 lock-line rewording and the `web_report.c` once-per-outage W lines) | **CI job COMPLETED**. Compile, link and partition fit implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only; F-36 fix **not yet verified on hardware** | "Artifact nostromo-firmware-15 has been successfully uploaded! Final size is 35918416 bytes. Artifact ID is 12114311601"; zip SHA256 `b008855877b824998e6b0242bb04865a68f20e1a89f426657735f81633007f93`; 1372 files |
+| 2026-10-17 | V-01, V-16b | Build #16 (`063d391`, first build with the run #16 `web_payload_parse_reply()` and the `post ok … stored as row` log line) | **CI job COMPLETED**. Compile, link and partition fit implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only; not flashed. The run #16 PHP/page changes are not part of the firmware and are not covered by CI | "Artifact nostromo-firmware-16 has been successfully uploaded! Final size is 35935147 bytes. Artifact ID is 12115176256"; zip SHA256 `01887bed0c432860a944e3d2cfa5a041e81cdd8a182081c763b4075979124402`; 1372 files |
 
 No other check has been executed. No build result exists for commits `184d5de`,
 `7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and
