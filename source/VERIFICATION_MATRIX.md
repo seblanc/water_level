@@ -16,6 +16,21 @@ There is no source change: the firmware is the one Build #12 compiled (`84dfcb1`
 rev 3 is unchanged. Physical verification is scheduled by the orchestrator after this phase.
 **No check result changed. Nothing was compiled, flashed or measured in this phase.**
 
+Run #10, REVIEW phase (attempt 2), 2026-10-17: **Build #13 (`80d9fe7`, the current HEAD)
+completed**. The only commit since Build #12 is the run #10 implementation note, which
+changed docs only. So Build #13 compiled the same firmware sources as #12 and re-confirms
+V-01 without adding coverage. The artifact is `nostromo-firmware-13`, 35631779 B, 1365
+files. That is 1 B less than #12, plausibly from embedded commit text (not verified). The
+image size and the warning scan are still not in the excerpt. Either artifact (-12 or -13)
+is valid for V-15. With -13, `source-commit.txt` should read `80d9fe7…`. I re-read
+`specifications/verification.md`, which is still rev 3, against `check_v15` in
+`test/bench/check_log.py` and found no defect. Bootloader `rst:` text before the banner
+is ignored. A second banner, a non-zero `cks_err`/`line_err`/`uart_ovf`, or any `E` line
+after the banner gives FAIL. Fewer than 10 counted readings gives INCONCLUSIVE.
+**No source change. No hardware or physical-verification result was available to this
+phase, so V-15 and every other runtime check stay NOT VERIFIED. Nothing was executed or
+measured.**
+
 ### Run #10: reading a capture against spec rev 3 (for the UART verifier)
 Bench "Simple UART": flash and log both use `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0`,
 console 115200. Capture ≥ 20 s from reset with HA **not** provisioned. Expected sequence
@@ -193,7 +208,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | Check | Req | Method | Procedure | Pass criterion | Needs | Result |
 |-------|-----|--------|-----------|----------------|-------|--------|
-| V-01 | R-01 | Build (GitHub Actions) | Committed tree → CI `idf.py -C source set-target esp32 build` | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version and the image size | CI | **PASS except warning scan / size** (Build #9, `c804544`, Stage 1 + Stage 2 compiled in; re-confirmed by Builds #10, `d240242`, and #11, `9be93a0`, same sources; Build #12, `84dfcb1`, adds M8a). IDF v5.4.2 assumed (same workflow as Build #5). The Stage 2 image size is not in the excerpt. It is ≤ 1.5 MB by inference (the build passed IDF's size check), but the exact size is NOT VERIFIED (the Stage 1 image was 0x35210 B, Build #5). Warning scan NOT VERIFIED |
+| V-01 | R-01 | Build (GitHub Actions) | Committed tree → CI `idf.py -C source set-target esp32 build` | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version and the image size | CI | **PASS except warning scan / size** (Build #9, `c804544`, Stage 1 + Stage 2 compiled in; re-confirmed by Builds #10, `d240242`, and #11, `9be93a0`, same sources; Build #12, `84dfcb1`, adds M8a; Build #13, `80d9fe7`, same sources as #12). IDF v5.4.2 assumed (same workflow as Build #5). The Stage 2 image size is not in the excerpt. It is ≤ 1.5 MB by inference (the build passed IDF's size check), but the exact size is NOT VERIFIED (the Stage 1 image was 0x35210 B, Build #5). Warning scan NOT VERIFIED |
 | V-02 | R-02 | Bench | SYSTEM_ARCHITECTURE.md §4.1 (CI artifact, `write_flash @flash_args`) or `idf.py -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 flash` | esptool prints "Hash of data verified" for each segment and the board resets into the app. `source-commit.txt` matches the intended commit | Board + USB | NOT VERIFIED |
 | V-03 | R-03 | Bench / log (auto: `check_log.py --check v03`) | Sensor connected; capture the monitor output to a file | Banner shows `rx_gpio=16 tx_gpio=17 baud=9600`; within 2 s, `status=OK` lines with `ok=` increasing. On failure, record `rx_bytes`/`line_err` | Board + sensor | NOT VERIFIED |
 | V-03b | R-07 | Bench / log (auto: `--check v03b`) | Boot with the sensor **disconnected** | Banner; one `sensor data lost` warning; `status=NO_DATA distance_mm=-1 age_ms=-1 ok=0` lines at 1 Hz; no reboot | Board | NOT VERIFIED |
@@ -208,7 +223,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-11 | R-07 | Fault injection (partly auto: `--check v11`) | Disconnect the sensor TX wire for ~5 s, then reconnect | One `sensor data lost`; `NO_DATA` within ≤ 2 s; `sensor data available` + `OK` within ≤ 2 s of reconnect (manual timing); no reboot | Board + sensor | NOT VERIFIED |
 | V-12 | R-01..R-07 | Stability (auto: `--check v12`) | Run ≥ 1 h | No `Guru Meditation`, `abort()`, `Task watchdog`, `Brownout detector`, or new `rst:` after the banner; monotonic timestamps | Board + sensor | NOT VERIFIED |
 | V-14 | R-03 | Bench / config | `WT_SENSOR_RX_GPIO=6`, build, flash, observe; then restore 16 | `E a02yyuw: RX GPIO6 is not a usable input ...` then abort/reboot; no silent hang. Optional | Board | NOT VERIFIED |
-| V-15 | R-10 (AC-VS3) | Bench / log (auto after M8a: `check_log.py --check v15`) | Flat rigid target ~30 cm, square to the beam (or water surface at 10–60 cm). HA **not provisioned** (G24, F-31). Open the monitor (resets the board) and capture ≥ 20 s from reset. Use an artifact built after M8a | One banner with `rx_gpio=16 tx_gpio=17 baud=9600`; no crash text, no `E` line after it. ≥ 10 `status=OK` lines with increasing `ok=`. From the first OK on: every line `OK` with 100 ≤ `distance_mm` ≤ 600; `cks_err=0 line_err=0 uart_ovf=0` on every line; no `sensor data lost` after the first OK. Tolerated: `NO_DATA` lines and one `sensor data lost` before the first OK, which must come ≤ 3 s after the banner (F-34). Full rules: SYSTEM_ARCHITECTURE.md §4.2.1 | Board + sensor + 10–60 cm target (G25) | NOT VERIFIED (M8a CI-compiled in Build #12; use artifact `nostromo-firmware-12`, expected `source-commit.txt` `84dfcb1…`. Checker and self-tests never run. **F-35 residual risk:** before lock the raw counters are published, so if a cold boot gives a leading NO_DATA line (F-34) *and* a pre-lock framing/checksum error, that tolerated line shows `cks_err`/`line_err` > 0 and `check_v15` reports FAIL. On a FAIL, look at the `sensor locked … discarded` line and repeat once. Not changed, because §4.2.1 requires zero counters on every line until the operator decides otherwise (G24)) |
+| V-15 | R-10 (AC-VS3) | Bench / log (auto after M8a: `check_log.py --check v15`) | Flat rigid target ~30 cm, square to the beam (or water surface at 10–60 cm). HA **not provisioned** (G24, F-31). Open the monitor (resets the board) and capture ≥ 20 s from reset. Use an artifact built after M8a | One banner with `rx_gpio=16 tx_gpio=17 baud=9600`; no crash text, no `E` line after it. ≥ 10 `status=OK` lines with increasing `ok=`. From the first OK on: every line `OK` with 100 ≤ `distance_mm` ≤ 600; `cks_err=0 line_err=0 uart_ovf=0` on every line; no `sensor data lost` after the first OK. Tolerated: `NO_DATA` lines and one `sensor data lost` before the first OK, which must come ≤ 3 s after the banner (F-34). Full rules: SYSTEM_ARCHITECTURE.md §4.2.1 | Board + sensor + 10–60 cm target (G25) | NOT VERIFIED (M8a CI-compiled in Build #12; use artifact `nostromo-firmware-12`, expected `source-commit.txt` `84dfcb1…`, or the same firmware in `nostromo-firmware-13`, `80d9fe7…`. Checker and self-tests never run. **F-35 residual risk:** before lock the raw counters are published, so if a cold boot gives a leading NO_DATA line (F-34) *and* a pre-lock framing/checksum error, that tolerated line shows `cks_err`/`line_err` > 0 and `check_v15` reports FAIL. On a FAIL, look at the `sensor locked … discarded` line and repeat once. Not changed, because §4.2.1 requires zero counters on every line until the operator decides otherwise (G24)) |
 | V-13a | R-08a, R-08e | Log + repo inspection | Flash a CI image with HA compiled in, NVS not provisioned; run V-03/V-05 | Exactly one `ha: disabled (...)` line; V-03/V-05 verdicts as with Build #8; no `wifi` lines. Repo/artifact grep finds no SSID or password | Board + sensor | NOT VERIFIED (ready: the Build #9–#12 artifacts have HA compiled in; use #12) |
 | V-13b | R-08 | Log | Provision NVS (§5.3), reboot | `ha: enabled id=wt_xxxxxx ...`, `wifi connected ip=...`, `mqtt connected` within 30 s | Board, Wi-Fi AP, broker | DEFERRED |
 | V-13c | R-08b | HA UI + `mosquitto_sub -v -t 'watertank/#' -t 'homeassistant/#'` | After V-13b | Retained discovery configs present; device "Water tank" with a "Distance" entity (mm) in HA; state updates every ~10 s and matches the UART `distance_mm` | Broker, HA | DEFERRED |
@@ -238,7 +253,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED (build half passed in CI, Builds #9–#12) | Warning scan and image size (full compile log needed); V-09/V-09b never executed |
+| AC-1 | NOT VERIFIED (build half passed in CI, Builds #9–#13) | Warning scan and image size (full compile log needed); V-09/V-09b never executed |
 | AC-2 | NOT VERIFIED | Hardware (V-02) |
 | AC-3 | NOT VERIFIED | Board + sensor + log capture (V-03, V-05); G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Tape measure and target (V-06); tolerance is an assumption |
@@ -268,6 +283,7 @@ operator-defined (verification spec rev 3).
 | 2026-10-17 | V-01 | Build #10 (`d240242`, same firmware sources as #9; docs-only commits since) | **CI job COMPLETED**. Same conclusions as #9. Compilation evidence only | "Artifact nostromo-firmware-10 has been successfully uploaded! Final size is 35629344 bytes. Artifact ID is 12106702118"; zip SHA256 `63b9a2a11ff97faa9c016918a8145cc762ec2cb726d4882ac72d711dbc9f9c30`; 1365 files |
 | 2026-10-17 | V-01 | Build #11 (`9be93a0`, same firmware sources as #9/#10; docs-only commits since) | **CI job COMPLETED**. Same conclusions as #9. Compilation evidence only | "Artifact nostromo-firmware-11 has been successfully uploaded! Final size is 35629338 bytes. Artifact ID is 12106614008"; zip SHA256 `d06fa3a455abe3b0a7446a7f6a3be4c86334fe50265b5ed4053cb7113c1bab5f`; 1365 files |
 | 2026-10-17 | V-01 | Build #12 (`84dfcb1`, first build with M8a counter rebase in `a02yyuw.c`) | **CI job COMPLETED**. M8a compiles and links (implied by the uploaded artifact). Warning scan and image size not in the excerpt. Compilation evidence only | "Artifact nostromo-firmware-12 has been successfully uploaded! Final size is 35631780 bytes. Artifact ID is 12109515780"; zip SHA256 `a67e6d58e177277aba34d1a78575400ba59f4d5f1fdcce6374aafd4558f29e62`; 1365 files |
+| 2026-10-17 | V-01 | Build #13 (`80d9fe7`, same firmware sources as #12; docs-only commit since) | **CI job COMPLETED**. Same conclusions as #12. Compilation evidence only | "Artifact nostromo-firmware-13 has been successfully uploaded! Final size is 35631779 bytes. Artifact ID is 12111696880"; zip SHA256 `2d2177e2989880c24995e4ed42258d0b3499f053a9ce4baa43699688a2368c8e`; 1365 files |
 
 No other check has been executed. No build result exists for commits `184d5de`,
 `7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and

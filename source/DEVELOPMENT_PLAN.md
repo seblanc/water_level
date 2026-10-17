@@ -9,7 +9,14 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #10, IMPLEMENTATION phase (attempt 1), 2026-10-17.
+Last updated: run #10, REVIEW phase (attempt 2), 2026-10-17.
+
+**Run #10 review:** Build #13 (`80d9fe7`) completed. Its only delta over #12 is docs, so it
+compiled the same firmware, and `nostromo-firmware-13` (`source-commit.txt` `80d9fe7…`) is
+as valid as -12 for M5/V-15. A static re-read of `check_v15` found no defect. No code
+change. No hardware result has reached any agent phase, so V-15 is still NOT VERIFIED. Next
+steps: the orchestrator or operator flashes -12 or -13, captures ≥ 20 s from reset with a
+10–60 cm target and HA not provisioned, then runs V-09b and `check_log.py --check v15`.
 
 **Run #10 implementation:** the operator asked to "do verification" (2026-10-17T19:18Z). There
 is no new builder result (Build #12, `84dfcb1`, completed). There is no defect report, and
