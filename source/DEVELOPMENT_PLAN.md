@@ -9,7 +9,20 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #6, ARCHITECTURE phase (attempt 1), 2026-10-17.
+Last updated: run #7, ARCHITECTURE phase (attempt 1), 2026-10-17.
+
+## Where the project stands (run #7)
+Both stated goals are **written and CI-compiled** (Build #9, `c804544`):
+- Stage 1: the 1 Hz UART distance stream.
+- Stage 2: Home Assistant over MQTT, which stays off until provisioned.
+
+There is no open code blocker. The remaining work is mostly evidence the agents cannot
+produce: host tests (V-09/V-09b), bench checks (M5), and the HA setup (M6b, G5). **The next
+implementation phase should not change firmware behaviour on speculation.** Allowed work:
+- (a) Fix a defect reported by a builder or bench result, if one arrives.
+- (b) Implement M7a, but only if the operator has supplied the tank geometry or asked for
+  the feature.
+- (c) Otherwise, review/doc only, and stop early.
 
 ## Milestones
 
@@ -20,7 +33,8 @@ Last updated: run #6, ARCHITECTURE phase (attempt 1), 2026-10-17.
 - [x] Run #4: **Stage 2 design** (SYSTEM_ARCHITECTURE.md §5): MQTT + HA discovery, runtime gating, NVS provisioning, topics/payloads, task model, reconnect policy, resource budget, new gaps G17–G19
 - [x] Run #5: static review of the partial Stage 2 code from `7bac3ea` (SYSTEM_ARCHITECTURE.md §5.10, F-22…F-30); build-gating decisions for the remaining steps (§5.10.2); §8 event lines updated (F-28)
 - [x] Run #6: compile-surface pass over the Stage 2 sources against IDF v5.4 APIs and warning flags (SYSTEM_ARCHITECTURE.md §5.10.4). No new blocker; F-31 (esp-mqtt console noise) recorded as accepted. M6a below is unchanged
-- [ ] Operator confirms or corrects G1 (pin direction), G2 (module type), G5 (broker/HA setup), G6 (acceptance criteria AC-1…AC-8)
+- [x] Run #7: stale pre-Build-#9 markers cleaned up; app ≤ 1.5 MB inferred from Build #9 (§5.8, G23); publisher/connect logic re-checked (F-32, no defect); M7a (level %) designed (§5.11)
+- [ ] Operator confirms or corrects G1 (pin direction), G2 (module type), G5 (broker/HA setup), G6 (acceptance criteria AC-1…AC-8), G8 (tank empty/full distances)
 
 ### M1–M4 — Stage 1 firmware (written runs #1–#3; **CI-compiled**, Builds #5–#8)
 - [x] Project skeleton, `sdkconfig.defaults`, Kconfig `WT_*` options, boot banner, README
@@ -111,12 +125,31 @@ build** must compile them (V-01 re-run, record the image size against §5.8). If
 the following phase fixes the build from the CI log before doing anything else.
 
 ### M6b — Stage 2 verification (operator; needs Wi-Fi AP, broker, HA)
-- [~] V-01 re-run: CI build with HA compiled in. **Done: Build #9 completed.** Still open: record the image size against the §5.8 estimate (look for the `water_tank.bin binary size` line in the full log, or check the file in artifact `nostromo-firmware-9`)
+- [~] V-01 re-run: CI build with HA compiled in. **Done: Build #9 completed**, so the app fits 1.5 MB (inferred). Still open (G23): record the exact image size against the §5.8 estimate (look for the `water_tank.bin binary size` line in the full log, or check the file in artifact `nostromo-firmware-9`)
 - [ ] V-13a…V-13g (VERIFICATION_MATRIX.md)
 - [ ] Re-run V-05 and V-12 with HA connected (Wi-Fi must not disturb the 1 Hz stream or cause brownouts, G17)
 
+### M7a — Tank level percentage (optional; gated on G8; SYSTEM_ARCHITECTURE.md §5.11)
+Do this only when the operator has supplied the geometry or asked for it. It is one
+implementation phase. All defaults are 0, so CI images behave exactly like Build #9.
+1. [ ] `ha_payload.{h,c}`: `ha_payload_level_permille()`; `ha_state_t.level_permille`
+   (−1 = absent); `ha_payload_state` appends `"level_pct"` only when ≥ 0; `HA_ENTITY_LEVEL`
+   discovery topic and payload
+2. [ ] `test/host/test_ha_payload.c`: the boundary cases listed in §5.11. Existing
+   exact-string expectations must stay unchanged when `level_permille = −1`
+3. [ ] `main/Kconfig.projbuild`: `WT_TANK_EMPTY_MM`, `WT_TANK_FULL_MM` (int, 0–4500,
+   default 0, `depends on WT_HA_ENABLE`). `ha_mqtt_priv.h` / `ha_config.c`: `nvs_get_u16`
+   for `tank_empty_mm` / `tank_full_mm`, with the Kconfig fallback
+4. [ ] `ha_mqtt.c`: validate the geometry once at start (one `W` line if invalid). Announce
+   the level entity when valid, otherwise publish an empty retained payload to its config
+   topic. Fill `level_permille` in the publisher
+5. [ ] `tools/nvs_config.example.csv` (two `u16` rows, value 0), README "Home Assistant"
+   section, VERIFICATION_MATRIX V-13h
+Exit: CI build passes. The UART report line is byte-identical (§8).
+
 ### M7 — Later
-- [ ] Tank geometry → `level_percent` / `volume_l` (G8)
+- [ ] Volume in litres (needs the tank cross-section in addition to G8)
+- [ ] (Optional) lower the esp-mqtt/transport log tags during outages if the operator finds the console noisy (F-29/F-31)
 - [ ] (Optional) MQTT over TLS (`mqtts://`, CA cert in NVS or embedded), OTA (needs an OTA partition table)
 
 ## Order and dependencies
@@ -124,6 +157,7 @@ the following phase fixes the build from the CI log before doing anything else.
 ```
 M0 ─→ M1–M4 (CI-compiled) ─→ M5 (operator, hardware)
                     └──────→ M6a steps 1–10 (written, run #6) ─→ CI Build #9 (compiled) ─→ M6b (operator, needs G5)
+                                                                                └─→ M7a (optional, needs G8)
 ```
 M5 and M6a are independent. M6a does not need the hardware results, because its default
 runtime behaviour without provisioning equals Stage 1. M6b should follow M5 step 5, so
