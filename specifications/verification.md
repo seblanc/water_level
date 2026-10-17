@@ -1,3 +1,3 @@
-<!-- NOSTROMO verification specification revision: 7 -->
+<!-- NOSTROMO verification specification revision: 8 -->
 
-I want you to test that data is well sent to the server, and that it displays correctly to the web page.
+Verify the data is well uploaded to the web server
