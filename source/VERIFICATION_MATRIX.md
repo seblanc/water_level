@@ -231,6 +231,11 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-13e | R-08d | Fault injection | Switch off the AP (or block the device) for 2 min, then restore | `wifi disconnected` + backoff lines (periodic esp-mqtt `E` lines are expected, F-31); UART report lines continue at 1 Hz throughout; reconnect without reboot; HA marks the device unavailable via the LWT (broker keepalive timeout) and recovers | AP control, broker, HA | DEFERRED |
 | V-13f | R-08d | Fault injection | Restart the broker / HA | `mqtt disconnected` → `mqtt connected`; discovery and availability republished; entity recovers without a device reboot | Broker | DEFERRED |
 | V-13g | R-08f | Log (auto: `--check v05`, `--check v12`) | Provisioned and connected: capture ≥ 60 s (V-05) and ≥ 1 h (V-12) | Same pass criteria as V-05 / V-12; no `Brownout detector`; `cks_err` rate as in V-10 (G17). Record the `wt_ha` stack high-water mark if logged | Board, sensor, Wi-Fi, broker | DEFERRED |
+| V-16a | R-11 (run #14) | Host unit test | `make -C test/host run` | `./test_web_payload` prints `<N> checks, 0 failures` and exits 0 | Host C compiler | NOT VERIFIED (never run) |
+| V-16b | R-11 | CI build | Committed run #14 tree (`e600560` or later) → CI | Build succeeds with `WT_WEB_ENABLE=y`, `wt_wifi`, `esp_http_client` and the certificate bundle; image fits the 1.5 MB app partition | CI | NOT VERIFIED (no build of the run #14 sources yet; Build #13 = `80d9fe7` predates them) |
+| V-16c | R-11 | Server | Upload `web/water/`, set `db_dsn`/credentials in `config.php`, run the `curl` test in `web/water/README.md` | `{"ok":true,"level_pct":50}`; wrong key → 401; the page shows the reading | Web host, DB | NOT VERIFIED (operator action) |
+| V-16d | R-11 | Log + server | Flash a run #14 image; capture ≥ 2 min | `web: enabled … key=set`, Wi-Fi gets an IP on `weefee`, `web: post ok (http 200)` within 60 s of the IP; a new row about every 60 s; the page level matches (30 − distance_cm)/25 × 100 %. 1 Hz UART lines unchanged (V-05 still passes) | Board, sensor, AP, server | NOT VERIFIED |
+| V-16e | R-11 | Fault injection | Stop the AP or rename `post.php` for 3 min, then restore | One `post failed`/`post rejected` W line per outage start (not one per retry); no `E` lines from HTTP/TLS; posts resume without a reboot; UART report continues at 1 Hz | AP / server control | NOT VERIFIED |
 | V-13h | R-09 | HA UI + `mosquitto_sub` (only after M7a) | Provision `tank_empty_mm`/`tank_full_mm`, reboot; hold the target at the full and empty distances and at the midpoint | "Level" entity in %; ≈100 / ≈0 / ≈50 (±2 points), clamped outside the range; with the geometry removed, the entity disappears from HA (empty retained config); UART line unchanged | Broker, HA, target | NOT APPLICABLE (not implemented) |
 
 ## Bench constraints affecting verification
@@ -244,8 +249,10 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 - `check_log.py` verdicts count as evidence only after V-09b passes, and only together with
   the log they were computed from. Store captures as `test/bench/evidence/<check>-<date>.txt`
   (`*.log` is git-ignored, F-16).
-- Builds run on GitHub Actions and only see committed files. CI images never contain
-  credentials, so Stage 2 checks need NVS provisioning (§5.3) or a local build.
+- Builds run on GitHub Actions and only see committed files. Since run #14, CI images
+  contain the Wi-Fi credentials and the web API key from `sdkconfig.defaults` (operator
+  request), so Wi-Fi starts on every boot. V-13a ("no `wifi` lines", "no SSID in the repo")
+  no longer applies to run #14 images. MQTT still needs NVS provisioning (§5.3).
 - Opening the serial port can reset the board (DTR/RTS).
 - No agent phase has had hardware access.
 
@@ -262,6 +269,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | AC-7 | NOT VERIFIED | Code is CI-compiled (Build #9). Still needs NVS provisioning (§5.3) plus Wi-Fi, a broker and HA (G5) |
 | AC-8 | NOT VERIFIED | As AC-7, plus AP/broker fault injection |
 
+| AC-WEB (run #14) | NOT VERIFIED | V-16a–V-16e: no build, server deployment or hardware run yet; tank limits 30/5 cm are provisional |
 | **AC-VS3** | NOT VERIFIED | M8a firmware part CI-compiled (Build #12). Still needs V-09b (host Python) and V-15 on hardware with a 10–60 cm target (G25) |
 
 AC-1…AC-8 are still **proposals** (G6) until the operator confirms them. AC-VS3 is

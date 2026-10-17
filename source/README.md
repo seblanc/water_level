@@ -99,8 +99,37 @@ valid frame, these three counters show the raw counts.
 | `WT_REPORT_PERIOD_MS` | 1000 |
 | `WT_SENSOR_STALE_MS` | 1000 |
 | `WT_MEDIAN_FILTER` / `WT_MEDIAN_WINDOW` | off / 5 |
+| *Wi-Fi* → `WT_WIFI_SSID` / `WT_WIFI_PASSWORD` | `weefee` / (set) in `sdkconfig.defaults` (NVS values take precedence) |
+| *Web report* → `WT_WEB_ENABLE` | on |
+| `WT_WEB_POST_URL` | `https://randoresto.ch/water/post.php` |
+| `WT_WEB_API_KEY` | set in `sdkconfig.defaults`, must equal `api_key` in `web/water/config.php` |
+| `WT_WEB_POST_PERIOD_MS` | 60000 |
 | *Home Assistant* → `WT_HA_ENABLE` | on (runtime-gated, see below) |
-| `WT_WIFI_SSID` / `WT_WIFI_PASSWORD` / `WT_MQTT_BROKER_URI` / `WT_MQTT_USERNAME` / `WT_MQTT_PASSWORD` | empty (NVS values take precedence) |
+| `WT_MQTT_BROKER_URI` / `WT_MQTT_USERNAME` / `WT_MQTT_PASSWORD` | empty (NVS values take precedence) |
+
+## Web report (PHP server at https://randoresto.ch/water)
+
+Once Wi-Fi is up, the firmware POSTs the newest reading to `WT_WEB_POST_URL` every
+`WT_WEB_POST_PERIOD_MS` (60 s). It also posts at once when the sensor goes to or from
+`NO_DATA`. After a failed post it waits 15 s before trying again. Nothing is queued while
+offline. The 1 Hz console lines are not affected.
+
+Server side: copy `web/water/` to the web host. Setup, database and page details are in
+`web/water/README.md`. The page shows the level in % using `empty_cm` = 30 and
+`full_cm` = 5 from `config.php`. These values are provisional. Change them on the server,
+no reflash needed.
+
+Console lines: `web: enabled device=<mac> url=… key=set period_ms=60000`, then
+`web: post ok (http 200)`. On errors you see `web: post failed: <err>` (network/TLS) or
+`web: post rejected: http <code>`: 401 = API key mismatch, 404 = wrong URL,
+5xx = server/database. The key and the Wi-Fi password are never logged.
+
+**Credentials in `sdkconfig.defaults`:** at the operator's request, the Wi-Fi SSID and
+password and the web API key are in `sdkconfig.defaults` so that CI artifacts work
+without provisioning. Anyone who can read the repository can read them. If the repository
+is public, move them to NVS (`tools/nvs_config.example.csv`, keys `wifi_ssid`, `wifi_pass`,
+`web_url`, `web_key`) and clear them in `sdkconfig.defaults`. Also change the key in
+`config.php`.
 | `WT_HA_PUBLISH_PERIOD_MS` | 10000 |
 | `WT_HA_DISCOVERY_PREFIX` | `homeassistant` |
 
@@ -126,7 +155,7 @@ like Stage 1. Wi-Fi is not started.
 0x9000/0x6000 is the IDF default `nvs` partition; confirm it in the build's partition
 table output (`idf.py partition-table`). Local builds can use `idf.py menuconfig` →
 *Water Tank Sensor → Home Assistant* instead; the values are then in the git-ignored
-`sdkconfig`. **Never put credentials into `sdkconfig.defaults`.**
+`sdkconfig`. Do not put MQTT credentials into `sdkconfig.defaults`.
 
 Stage 2 uses the larger single-app partition table (1.5 MB app). Flash a Stage 2 image
 together with its partition table (`idf.py flash` or `write_flash @flash_args`).
@@ -203,8 +232,11 @@ too short for the check). The checker and its self-tests have not been run yet.
 main/                      app_main, banner, 1 Hz reporter task, Kconfig
 components/a02yyuw/        sensor driver (UART2 + RX task) and pure-C parser/filter
 components/level_report/   report dispatcher (level_report_add_sink); Stage 1 = console sink
-components/ha_mqtt/        Stage 2: Wi-Fi + MQTT + HA discovery sink; pure-C payload builders
-tools/                     nvs_config.example.csv (HA provisioning template)
-test/host/                 host unit tests for parser/filter and HA payloads
+components/wt_wifi/        shared Wi-Fi station (reconnect with backoff)
+components/ha_mqtt/        Stage 2: MQTT + HA discovery sink; pure-C payload builders
+components/web_report/     HTTPS POST sink for web/water/post.php; pure-C form builder
+web/water/                 PHP endpoint, SQLite/MySQL storage and level web page
+tools/                     nvs_config.example.csv (provisioning template)
+test/host/                 host unit tests for parser/filter, HA payloads and web form
 test/bench/                offline log checker for bench captures + its self-tests
 ```
