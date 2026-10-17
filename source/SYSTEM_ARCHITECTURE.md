@@ -1,11 +1,14 @@
 # SYSTEM ARCHITECTURE — Water Tank Level (project 1a95ca931d72)
 
-Last updated: run #4, ARCHITECTURE phase (attempt 1), 2026-10-17.
+Last updated: run #5, ARCHITECTURE phase (attempt 1), 2026-10-17.
 
 **Evidence state.** The Stage 1 firmware **has been compiled in CI** (GitHub Actions, `espressif/idf:v5.4.2`).
 Build #5 compiled and linked it, and Build #8 (`43e0382`) completed and uploaded artifact
 `nostromo-firmware-8`. **It has never been flashed, run, or measured on hardware**, and the
-host tests have never been executed. No agent phase has had a shell, a toolchain, or bench access. Hardware facts below
+host tests have never been executed. The partial Stage 2 sources added by commit `7bac3ea`
+(run #4 implementation, recorded as *failed*) **have never been compiled by anything**:
+no builder result exists for any commit after `43e0382`, and `components/ha_mqtt/` has no
+`CMakeLists.txt` yet (§5.10). No agent phase has had a shell, a toolchain, or bench access. Hardware facts below
 either come from the project specs or are marked **[ASSUMPTION]** or **[DATASHEET-RECALL]**.
 The second marker means general knowledge of the part, not checked against a supplied
 document (no reference documents were provided).
@@ -18,7 +21,9 @@ document (no reference documents were provided).
 | #2 arch / impl / review | Docs aligned with the code (§7, §8). Fixes F-03/F-04/F-05/F-12, F-13 documented. Offline log checker added (§7.4) |
 | #3 arch → impl (attempts 1–8) | CI integration. Build #1 blocked by a dirty worktree (F-15). #2/#3 blocked by a push 403 (F-17). #4 blocked by the missing `workflow` token scope (F-18). #5–#7 compiled and linked, then failed in packaging on git "dubious ownership" (F-19). `level_report` sink fan-out added (F-08) |
 | #3 review (attempt 9) | Operator workflow fix `a45bcc0`. **Build #8 completed**, artifact uploaded. No source defects found |
-| **#4 arch (this phase)** | No new builder result (Build #8 is still the latest). Read-only check of `../.github/workflows/nostromo-build.yml` settles the CI-artifact layout and the flashing procedure (§4.1, G13 closed). **Stage 2 (Home Assistant over MQTT) design worked out to implementable detail (§5)**, with runtime gating so the Stage 1 behaviour is unchanged when HA is not configured. Plan for the next implementation phase: DEVELOPMENT_PLAN.md M6a |
+| #4 arch | No new builder result (Build #8 is still the latest). Read-only check of `../.github/workflows/nostromo-build.yml` settles the CI-artifact layout and the flashing procedure (§4.1, G13 closed). **Stage 2 (Home Assistant over MQTT) design worked out to implementable detail (§5)**, with runtime gating so the Stage 1 behaviour is unchanged when HA is not configured. Plan for the next implementation phase: DEVELOPMENT_PLAN.md M6a |
+| #4 impl (attempt 2, commit `7bac3ea`, recorded **failed**) | M6a steps 1–4 written: `ha_payload.{h,c}`, `test_ha_payload.c` + Makefile target, `ha_config.c`, `ha_mqtt.c`, `ha_mqtt.h`, `ha_mqtt_priv.h`. Steps 5–10 (CMake, `main` hook, Kconfig, `sdkconfig.defaults`, provisioning template, README, checker case) **not written**. The reason for the failure is not recorded in the tree (G20) |
+| **#5 arch (this phase)** | No new builder result (Build #8 is still the latest). Static review of the partial Stage 2 code (§5.10, F-22…F-29). Build-gating design for the remaining steps settled (§5.2, §5.10.2). M6a re-planned as the *remaining* steps 5–10 plus fixes (DEVELOPMENT_PLAN.md) |
 
 Earlier per-attempt detail is preserved in git history (commits `65c6ad9` … `bacd2c8`).
 
@@ -29,7 +34,7 @@ Earlier per-attempt detail is preserved in git history (commits `65c6ad9` … `b
 | Stage | Goal | Source | State |
 |-------|------|--------|-------|
 | Stage 1 | Read an A02YYUW ultrasonic sensor over UART and print the distance on the UART console **once per second** | PURPOSE rev 1, TELEMETRY rev 1 | Written; **CI-compiled** (Builds #5–#8); not run on hardware |
-| Stage 2 | Send the level data to the user's Home Assistant | PURPOSE rev 1 ("Then we will implement…") | **Design complete (§5)**; implementation planned (M6a). No code yet |
+| Stage 2 | Send the level data to the user's Home Assistant | PURPOSE rev 1 ("Then we will implement…") | **Design complete (§5)**. Component code partly written (`7bac3ea`, §5.10) but **not wired into the build and never compiled**. Remaining work: M6a steps 5–10 |
 
 ## 2. Hardware context
 
@@ -92,16 +97,16 @@ boot. Stage 2 adds no pins (Wi-Fi is on-chip).
   changes it to "single factory app, large" (1.5 MB app)** because of the Wi-Fi/MQTT image
   size (§5.8).
 
-### 3.2 Project layout (as implemented; Stage 2 additions marked `+`)
+### 3.2 Project layout (as implemented; Stage 2 additions marked `+` = written in `7bac3ea`, `++` = still to write)
 
 ```
 source/
 ├── CMakeLists.txt                 # project(water_tank), PROJECT_VER 0.1.0
 ├── sdkconfig.defaults             # esp32, 4 MB flash, console UART0 @115200, INFO logs, WT_* defaults
 ├── main/
-│   ├── CMakeLists.txt             # REQUIRES a02yyuw level_report nvs_flash esp_app_format spi_flash (+ ha_mqtt)
-│   ├── Kconfig.projbuild          # menu "Water Tank Sensor" (WT_* options) (+ "Home Assistant" submenu)
-│   └── main.c                     # app_main, banner, NVS init, reporter task (fixed rate) (+ ha_mqtt_start)
+│   ├── CMakeLists.txt             # REQUIRES a02yyuw level_report nvs_flash esp_app_format spi_flash (++ ha_mqtt)
+│   ├── Kconfig.projbuild          # menu "Water Tank Sensor" (WT_* options) (++ "Home Assistant" submenu)
+│   └── main.c                     # app_main, banner, NVS init, reporter task (fixed rate) (++ ha_mqtt_start)
 ├── components/
 │   ├── a02yyuw/                   # REQUIRES driver (< v5.3) | esp_driver_uart (+ PRIV esp_driver_gpio) (≥ v5.3); PRIV esp_timer
 │   │   ├── include/a02yyuw.h          # driver API (config, sample, stats)
@@ -115,16 +120,19 @@ source/
 │   │   ├── level_report.c             # sink registry + fan-out, status strings
 │   │   ├── level_report_priv.h        # component-internal: console sink prototype
 │   │   └── level_report_uart.c        # console sink (§8 report line)
-│   └── ha_mqtt/                   # + Stage 2 (§5)
+│   └── ha_mqtt/                   # Stage 2 (§5)
+│       ├── CMakeLists.txt             # ++ MISSING: without it IDF does not build the component (§5.10.2)
 │       ├── include/ha_mqtt.h          # + ha_mqtt_start()
+│       ├── include/ha_payload.h       # + pure-C builder API, buffer-size constants
+│       ├── ha_mqtt_priv.h             # + ha_config_t, ha_config_load()
 │       ├── ha_config.c                # + NVS → Kconfig fallback settings load
-│       ├── ha_payload.{h,c}           # + pure-C JSON/topic builders (host-testable)
+│       ├── ha_payload.c               # + pure-C JSON/topic builders (host-testable)
 │       └── ha_mqtt.c                  # + Wi-Fi STA, esp-mqtt client, sink, publisher task
 ├── tools/
-│   └── nvs_config.example.csv     # + NVS provisioning template, placeholders only (§5.3)
+│   └── nvs_config.example.csv     # ++ NVS provisioning template, placeholders only (§5.3)
 └── test/
-    ├── host/                      # host unit tests (cc, no IDF): test_parser.c (+ test_ha_payload.c)
-    └── bench/                     # offline log checker (Python 3 stdlib): check_log.py, test_check_log.py
+    ├── host/                      # host unit tests (cc, no IDF): test_parser.c, + test_ha_payload.c, + Makefile target
+    └── bench/                     # offline log checker (Python 3 stdlib): check_log.py, test_check_log.py (++ `ha:` case)
 ```
 
 ### 3.3 Module responsibilities (Stage 1, as implemented)
@@ -299,7 +307,11 @@ python -m esptool --chip esp32 -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-por
   returns `ESP_OK`. It does not initialise `esp_netif`, start Wi-Fi or create a task. A CI
   artifact without provisioning therefore behaves like Stage 1 plus that one line.
 - With `WT_HA_ENABLE=n`, `main.c` compiles the call out (`#if CONFIG_WT_HA_ENABLE`), so the
-  binary contains Stage 1 code only.
+  binary contains Stage 1 code only. The Kconfig strings of §5.3 `depends on WT_HA_ENABLE`,
+  so their `CONFIG_*` macros do not exist when it is `n`. The component's `CMakeLists.txt`
+  therefore compiles `ha_config.c` and `ha_mqtt.c` only when `CONFIG_WT_HA_ENABLE` is set
+  (§5.10.2). That `n` path is never built by CI (sdkconfig.defaults sets `y`), so it is
+  covered by review only.
 
 ### 5.3 Configuration and provisioning (no secrets in the repo)
 
@@ -438,6 +450,68 @@ changes the flash layout, so Stage 2 images must be flashed with their partition
 - The rest can only be verified with a Wi-Fi AP, a broker and HA. The bench lists none of
   these, so the operator must perform V-13a…g.
 
+### 5.10 Implementation state of Stage 2 (run #5 static review of `7bac3ea`)
+
+Read-only review; nothing compiled or executed. The written files follow §5.1–§5.9 closely.
+
+#### 5.10.1 What exists and matches the design
+- `ha_payload.c`: topic, device-ID, state and discovery builders exactly as §5.4 (field
+  order, `availability_mode: all`, status entity `diagnostic`). Rejects JSON-unsafe strings
+  (`"`, `\`, control chars) and MQTT wildcards rather than escaping them. Extra helper
+  `ha_payload_uri_host()` strips `user:pw@` for the banner (§5.3 "never log passwords").
+- `test_ha_payload.c`: exact-string checks for every builder, truncation boundaries,
+  invalid input. The Makefile builds and runs it with `-Werror`. Hand-checked boundary
+  lengths (25-char state topic, 69-char OK payload) are consistent with the strings.
+- `ha_config.c`: per-key NVS → Kconfig fallback; a missing namespace is silent, other NVS
+  errors are a warning.
+- `ha_mqtt.c`: runtime gate, depth-1 overwrite sink, `wt_ha` task (prio 3, 4096 B),
+  1→2→4…→32→60 s esp_timer backoff, MQTT client started once after the first IP, LWT
+  `offline` retained, discovery + birth on every connect, sensor-availability topic
+  published before the state on a transition, no `abort()`/`esp_restart()`. It also calls
+  `esp_wifi_set_storage(WIFI_STORAGE_RAM)` so the driver never copies credentials into
+  its own NVS namespace (good, not in the original design).
+
+#### 5.10.2 Decisions for the remaining steps
+1. **`components/ha_mqtt/CMakeLists.txt`** (the missing piece that keeps the component out
+   of the build today):
+   ```cmake
+   set(srcs "ha_payload.c")
+   if(CONFIG_WT_HA_ENABLE)
+       list(APPEND srcs "ha_config.c" "ha_mqtt.c")
+   endif()
+   idf_component_register(
+       SRCS ${srcs}
+       INCLUDE_DIRS "include"
+       REQUIRES level_report
+       PRIV_REQUIRES esp_wifi esp_netif esp_event nvs_flash mqtt esp_timer esp_app_format
+   )
+   ```
+   `esp_app_format` is needed for `esp_app_desc.h` (F-23). `esp_hw_support` (`esp_mac.h`)
+   and `log` are IDF common requirements. `CONFIG_*` variables are available in component
+   CMake files during the build pass **[DATASHEET-RECALL: IDF build system]**.
+2. **`main/CMakeLists.txt`**: add `ha_mqtt` to `REQUIRES` unconditionally (it always has
+   at least `ha_payload.c`, so the include path exists in both configurations).
+3. **`main.c`**: `#if CONFIG_WT_HA_ENABLE` → `#include "ha_mqtt.h"` and, between
+   `level_report_init()` and the reporter `xTaskCreate`, `(void)ha_mqtt_start();` with a
+   comment that errors are already logged and HA is optional. Update the file comment
+   ("Stage 1" → Stage 1 + optional Stage 2). Remove the "Not used in Stage 1" NVS comment.
+4. **Kconfig**: submenu "Home Assistant" inside "Water Tank Sensor":
+   `WT_HA_ENABLE` (bool, default y); the remaining options `depends on WT_HA_ENABLE`:
+   `WT_WIFI_SSID`, `WT_WIFI_PASSWORD`, `WT_MQTT_BROKER_URI`, `WT_MQTT_USERNAME`,
+   `WT_MQTT_PASSWORD` (string, default ""), `WT_HA_PUBLISH_PERIOD_MS` (int, 10000, range
+   1000 600000), `WT_HA_DISCOVERY_PREFIX` (string, "homeassistant"). These are exactly the
+   macros `ha_config.c`/`ha_mqtt.c` already reference.
+5. **Steps 5 + 6 (CMake and Kconfig) must land in the same commit.** With only the CMake
+   file, `ha_mqtt.c` references undefined `CONFIG_WT_*` macros and the build breaks.
+
+#### 5.10.3 Review findings on the written code (to fix in M6a)
+See §7.2 F-22…F-29. None is known to break compilation once §5.10.2 is in place, but this
+cannot be confirmed without a CI build.
+
+**Expected component-tree compile behaviour today [ASSUMPTION]:** the IDF build skips a
+`components/` sub-directory that has no `CMakeLists.txt` (possibly with a notice), so a
+build of `7bac3ea` should still produce the Stage 1 image. Unverified; no build was run.
+
 ## 6. Assumptions and gaps
 
 | ID | Gap / uncertainty | Assumption taken | Impact if wrong | Resolution path |
@@ -458,7 +532,9 @@ changes the flash layout, so Stage 2 images must be flashed with their partition
 | G14–G16 | CI push 403, `workflow` scope, git "dubious ownership" | **All resolved** by operator actions; Build #8 passed end to end | — | — |
 | G17 | Wi-Fi + sensor on one 3V3 rail (new, Stage 2) | Board LDO copes with Wi-Fi TX peaks | Brownout resets, noisy sensor | V-12/V-10 with HA enabled; add bulk capacitance (e.g. 100 µF near sensor VCC) or power the sensor from 5 V **only after** checking its TX logic level |
 | G18 | 2.4 GHz coverage at the tank (new) | Adequate RSSI | Frequent reconnects, gaps in HA | `ha` log lines show disconnect reasons. Optional RSSI field later |
-| G19 | Bundled `mqtt` component in future IDF versions (new) | Present in v5.4.2 | Build break on IDF ≥ 6 if it is moved to the component registry **[ASSUMPTION]** | CI pins v5.4.2; revisit on an IDF upgrade |
+| G20 | Why run #4 implementation attempt 2 was recorded as failed (run #5) | Phase ended before steps 5–10; no build was triggered (no builder result after Build #8) | If the failure was a build error on a pushed commit, its log is missing here | Operator/platform supplies the failure reason or a CI log for `7bac3ea` if one exists |
+| G21 | Will IDF ignore `components/ha_mqtt/` without `CMakeLists.txt`? (run #5) | Yes, the directory is skipped and the Stage 1 image builds | If wrong, any build of `7bac3ea` fails at configure time | Moot once M6a step 5 lands |
+| G19 | Bundled `mqtt` component in future IDF versions | Present in v5.4.2 | Build break on IDF ≥ 6 if it is moved to the component registry **[ASSUMPTION]** | CI pins v5.4.2; revisit on an IDF upgrade |
 
 ## 7. Implementation status and static review
 
@@ -491,7 +567,16 @@ changes the flash layout, so Stage 2 images must be flashed with their partition
 | F-14 | `-Werror=all` exposure | Read-checked. The compile succeeded, but the warning scan is unconfirmed (V-01) |
 | F-15…F-19 | CI process blockers (dirty tree, 403, `workflow` scope, dubious ownership) | **All resolved**; Build #8 completed |
 | F-20 (new) | The workflow's `SHA256SUMS` probably lists itself, so a plain `sha256sum -c` would report one false failure | Workaround in §4.1. Platform file, not edited by agents |
-| F-21 (new) | `init_nvs()` erase-on-version-change would wipe Stage 2 credentials | Accepted, documented (§5.3) |
+| F-21 | `init_nvs()` erase-on-version-change would wipe Stage 2 credentials | Accepted, documented (§5.3) |
+| F-22 (run #5) | `components/ha_mqtt/CMakeLists.txt`, the Kconfig "Home Assistant" submenu, the `main` hook and `sdkconfig.defaults` changes are missing, so Stage 2 is **not part of any build** | Open, **blocker for R-08**. M6a step 5–7, one commit (§5.10.2) |
+| F-23 (run #5) | `ha_mqtt.c` includes `esp_app_desc.h` → the component needs `esp_app_format` in `PRIV_REQUIRES` | Open; included in the §5.10.2 CMake text |
+| F-24 (run #5) | `.gitignore` lacks `test/host/test_ha_payload` (host binary), `nvs_config.csv`, `nvs*.bin`. The last two matter for R-08e (no secrets in git) | Open, M6a step 8 |
+| F-25 (run #5) | `schedule_reconnect()` advances the backoff even when the timer is already armed (`ESP_ERR_INVALID_STATE`), so a second disconnect event during a pending retry doubles the delay and logs a wrong "retry in N s" | Open, minor. Advance the delay only when `esp_timer_start_once` returns `ESP_OK`; otherwise log without a delay value |
+| F-26 (run #5) | `start_network()` fail path leaves the two event-handler instances and the default STA netif registered after `esp_wifi_deinit()` | Accepted (no events fire after deinit; failure path is one-shot). Add a comment |
+| F-27 (run #5) | `esp_mqtt_client_publish()` performs socket I/O in `wt_ha` and can block it for the network timeout | Accepted by design: the reporter only does `xQueueOverwrite` (§5.5). V-13e checks the UART stream during an outage |
+| F-28 (run #5) | `ha_mqtt.c`/`ha_config.c` emit log lines not in §8 (`discovery published, wt_ha stack free=`, `wifi connect failed`, `mqtt connection refused/error`, `mqtt start failed`, `nvs key … unreadable`, `reconnect timer:`) | **Done in this phase**: §8 updated. No code change needed |
+| F-29 (run #5) | Only the `wifi` tag is lowered to WARN. Other network tags (e.g. `phy_init`, `esp_netif_handlers`, `net80211`, `pp`) may still print INFO lines at connect **[ASSUMPTION]** | Harmless for `check_log.py` (it reads only `wt:` report lines and crash patterns). Observe in V-13b; lower more tags only if the console becomes noisy |
+| F-30 (run #5) | Once Stage 2 links, the app is expected to exceed the 1 MB default partition (§5.8), so the CMake/Kconfig commit without `CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y` would likely fail at the size check **[ASSUMPTION]** | Open: M6a step 7 goes into the same commit as steps 5–6 |
 
 ### 7.3 ESP-IDF APIs used (build-compatibility surface)
 Stage 1 (compiled on v5.4.2): `uart_driver_install`, `uart_param_config`
@@ -503,7 +588,8 @@ Stage 1 (compiled on v5.4.2): `uart_driver_install`, `uart_param_config`
 `nvs_flash_erase`; `esp_app_get_description`, `esp_chip_info`, `esp_flash_get_size`,
 `esp_get_idf_version`. Needs IDF ≥ v5.0.
 
-Stage 2 (planned, not yet compiled): `esp_netif_init`, `esp_event_loop_create_default`,
+Stage 2 (written in `7bac3ea`, **not yet compiled**; also uses `esp_wifi_set_storage`,
+`esp_mqtt_client_destroy`, `esp_wifi_deinit`, `uxTaskGetStackHighWaterMark`, `strlcpy`): `esp_netif_init`, `esp_event_loop_create_default`,
 `esp_netif_create_default_wifi_sta`, `esp_wifi_init` (`WIFI_INIT_CONFIG_DEFAULT`),
 `esp_wifi_set_mode`, `esp_wifi_set_config`, `esp_wifi_start`, `esp_wifi_connect`,
 `esp_event_handler_instance_register`; `esp_read_mac`; `esp_timer_create` /
@@ -557,8 +643,16 @@ Future fields must only be appended.
 - `I wt: sensor data available`
 - `W a02yyuw: UART FIFO|ring buffer overflow, input flushed`
 - `E a02yyuw: ... not usable ...` / `RX and TX GPIO must differ` (invalid configuration, followed by an abort)
-- Stage 2 (tag `ha`): `wifi connected ip=<ip>`, `wifi disconnected reason=<n>, retry in <s> s`,
-  `mqtt connected`, `mqtt disconnected`, `E ha: init failed: <err>; HA off`
+- Stage 2 (tag `ha`), as written in `ha_mqtt.c` / `ha_config.c`:
+  - `I ha: wifi connected ip=<ip>`
+  - `W ha: wifi disconnected reason=<n>, retry in <s> s` / `W ha: wifi connect failed (<err>), retry in <s> s`
+  - `I ha: mqtt connected`, `W ha: mqtt disconnected` (transition only)
+  - `W ha: mqtt connection refused (code <n>), check user/password` / `W ha: mqtt connection error (type <n>), retrying` (once per outage)
+  - `I ha: discovery published, wt_ha stack free=<n> B` (each connect; source of the V-13g stack figure)
+  - `E ha: mqtt start failed: <err>`, `E ha: reconnect timer: <err>`
+  - `W ha: nvs key <key> unreadable (<err>), using Kconfig value` / `W ha: nvs namespace wt_cfg not readable (<err>), …`
+  - `E ha: <step>: <err>` from the `ESP_*_ON_*` macros, then `E ha: init failed: <err>; HA off`
+  - Other network tags (`phy_init`, `esp_netif_handlers`, …) may add INFO lines (F-29).
 
 **Host parsing rule:** a line matching `\bwt: distance_mm=` is a report line. Parse the
 fields as whitespace-separated `key=value` pairs. Any `Guru Meditation`, `abort()`,

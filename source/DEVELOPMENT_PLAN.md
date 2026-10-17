@@ -9,7 +9,7 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #4, ARCHITECTURE phase (attempt 1), 2026-10-17.
+Last updated: run #5, ARCHITECTURE phase (attempt 1), 2026-10-17.
 
 ## Milestones
 
@@ -18,6 +18,7 @@ Last updated: run #4, ARCHITECTURE phase (attempt 1), 2026-10-17.
 - [x] VERIFICATION_MATRIX.md: derived requirements, proposed acceptance criteria, checks, results log
 - [x] Run #4: docs condensed. CI-artifact flashing procedure derived from the workflow, read-only (§4.1, G13 closed, F-20)
 - [x] Run #4: **Stage 2 design** (SYSTEM_ARCHITECTURE.md §5): MQTT + HA discovery, runtime gating, NVS provisioning, topics/payloads, task model, reconnect policy, resource budget, new gaps G17–G19
+- [x] Run #5: static review of the partial Stage 2 code from `7bac3ea` (SYSTEM_ARCHITECTURE.md §5.10, F-22…F-30); build-gating decisions for the remaining steps (§5.10.2); §8 event lines updated (F-28)
 - [ ] Operator confirms or corrects G1 (pin direction), G2 (module type), G5 (broker/HA setup), G6 (acceptance criteria AC-1…AC-8)
 
 ### M1–M4 — Stage 1 firmware (written runs #1–#3; **CI-compiled**, Builds #5–#8)
@@ -54,41 +55,46 @@ build. A later build with HA enabled but not provisioned should behave the same,
 Scope follows SYSTEM_ARCHITECTURE.md §5 exactly. Every step must keep the §8 report line
 byte-identical and must not change Stage 1 module behaviour.
 
-1. [ ] `components/ha_mqtt/ha_payload.{h,c}`, pure C, no IDF headers. Builders for the topic
-   strings, the device ID from 3 MAC bytes, the state JSON, the distance/status discovery
-   JSON and the availability strings. Each writes into a caller buffer and returns its
-   length, or -1 on truncation
-2. [ ] `test/host/test_ha_payload.c` + Makefile target. Cases: exact expected JSON for OK /
-   NO_DATA / OUT_OF_RANGE, truncation returns -1, ID formatting, discovery topic with a
-   custom prefix
-3. [ ] `components/ha_mqtt/ha_config.c`: read NVS namespace `wt_cfg` keys, falling back to
-   Kconfig per key. A missing namespace is not an error
-4. [ ] `components/ha_mqtt/ha_mqtt.c` + `include/ha_mqtt.h`: `esp_err_t ha_mqtt_start(void)`,
-   runtime gate, Wi-Fi STA with esp_timer backoff (1→60 s), esp-mqtt client with LWT, birth
-   and discovery publishes on each connect, depth-1 overwrite queue sink, `wt_ha` publisher
-   task (prio 3, 4096 B), `esp_log_level_set("wifi", ESP_LOG_WARN)`. No `abort()` and no
-   `esp_restart()` anywhere in the component
-5. [ ] `components/ha_mqtt/CMakeLists.txt` (`REQUIRES level_report`;
-   `PRIV_REQUIRES esp_wifi esp_netif esp_event nvs_flash mqtt esp_timer`) and the `main/`
-   integration: `#if CONFIG_WT_HA_ENABLE` call between `level_report_init()` and the
-   reporter task creation. An error from `ha_mqtt_start` is logged and does not abort
-6. [ ] Kconfig submenu "Home Assistant": `WT_HA_ENABLE` (default y), `WT_WIFI_SSID`,
-   `WT_WIFI_PASSWORD`, `WT_MQTT_BROKER_URI`, `WT_MQTT_USERNAME`, `WT_MQTT_PASSWORD` (all
-   default ""), `WT_HA_PUBLISH_PERIOD_MS` (10000, range 1000–600000),
-   `WT_HA_DISCOVERY_PREFIX` ("homeassistant")
-7. [ ] `sdkconfig.defaults`: `CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y`, `CONFIG_WT_HA_ENABLE=y`.
-   **No credentials**
-8. [ ] `tools/nvs_config.example.csv` (placeholders only), `.gitignore` additions
-   (`nvs_config.csv`, `nvs*.bin`), README section "Home Assistant" (provisioning steps,
-   HA-side expectations, security note §5.3)
-9. [ ] `test/bench/test_check_log.py`: add a synthetic log containing `ha:` lines and
-   confirm that the verdicts are unchanged
-10. [ ] Self-review against the §7.3 Stage 2 API list and `-Werror=all` (format specifiers,
-    unused variables in the disabled path)
+Steps 1–4 were written in run #4 (commit `7bac3ea`, phase recorded as failed, G20) and
+reviewed read-only in run #5 (§5.10). They are **written, never compiled**. **Do not
+rewrite them**; only apply the listed fixes.
+
+1. [x] `components/ha_mqtt/include/ha_payload.h` + `ha_payload.c`: pure-C builders (written; host test not run)
+2. [x] `test/host/test_ha_payload.c` + Makefile target (written; **never executed**, V-09)
+3. [x] `components/ha_mqtt/ha_config.c` + `ha_mqtt_priv.h` (written)
+4. [~] `components/ha_mqtt/ha_mqtt.c` + `include/ha_mqtt.h` (written). Remaining fix:
+   F-25 (advance the backoff only when `esp_timer_start_once` returns `ESP_OK`); add the
+   F-26 comment in the fail path
+
+**Steps 5, 6 and 7 go into one change** (F-22, F-30): any one of them alone is expected
+to break the build. Use the exact text in SYSTEM_ARCHITECTURE.md §5.10.2.
+
+5. [ ] `components/ha_mqtt/CMakeLists.txt`: `ha_payload.c` always; `ha_config.c` and
+   `ha_mqtt.c` only `if(CONFIG_WT_HA_ENABLE)`. `REQUIRES level_report`; `PRIV_REQUIRES
+   esp_wifi esp_netif esp_event nvs_flash mqtt esp_timer esp_app_format` (F-23).
+   `main/CMakeLists.txt`: add `ha_mqtt` to `REQUIRES`. `main.c`: `#if CONFIG_WT_HA_ENABLE`
+   include + `(void)ha_mqtt_start();` between `level_report_init()` and the reporter
+   `xTaskCreate`; update the two stale "Stage 1 / not used" comments
+6. [ ] `main/Kconfig.projbuild` submenu "Home Assistant": `WT_HA_ENABLE` (bool, default y);
+   `depends on WT_HA_ENABLE`: `WT_WIFI_SSID`, `WT_WIFI_PASSWORD`, `WT_MQTT_BROKER_URI`,
+   `WT_MQTT_USERNAME`, `WT_MQTT_PASSWORD` (string, default ""), `WT_HA_PUBLISH_PERIOD_MS`
+   (int, 10000, range 1000 600000), `WT_HA_DISCOVERY_PREFIX` (string, "homeassistant").
+   Help texts: credentials belong in NVS or a local `sdkconfig`, never in `sdkconfig.defaults`
+7. [ ] `sdkconfig.defaults`: `CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y`,
+   `CONFIG_WT_HA_ENABLE=y`. **No credentials**
+8. [ ] `tools/nvs_config.example.csv` (header `key,type,encoding,value`; `wt_cfg,namespace,,`
+   then the five `string` keys with placeholder values). `.gitignore`: `nvs_config.csv`,
+   `nvs*.bin`, `test/host/test_ha_payload` (F-24). README section "Home Assistant":
+   provisioning steps (§5.3), HA-side expectations (§5.4), security note, NVS-erase note (F-21)
+9. [ ] `test/bench/test_check_log.py`: a synthetic log with `ha:` lines (enabled and
+   disabled variants, plus a `phy_init` INFO line, F-29) and unchanged V-03/V-05/V-12 verdicts
+10. [ ] Self-review: every `CONFIG_WT_*` macro used in C exists in Kconfig with the same
+    name and type; format specifiers vs. types (`%d` with `int` Kconfig ints, `PRIu32`);
+    no `abort`/`esp_restart`/`ESP_ERROR_CHECK` in `components/ha_mqtt`
 
 Exit criterion for the phase: the files are written and statically reviewed. The **next CI
-build** must compile them (V-01 re-run). If it fails, the following phase fixes the
-build from the CI log before doing anything else.
+build** must compile them (V-01 re-run, record the image size against §5.8). If it fails,
+the following phase fixes the build from the CI log before doing anything else.
 
 ### M6b — Stage 2 verification (operator; needs Wi-Fi AP, broker, HA)
 - [ ] V-01 re-run: CI build with HA compiled in; record the image size against the §5.8 estimate
@@ -103,7 +109,7 @@ build from the CI log before doing anything else.
 
 ```
 M0 ─→ M1–M4 (CI-compiled) ─→ M5 (operator, hardware)
-                    └──────→ M6a (agent, next phase) ─→ CI build ─→ M6b (operator, needs G5)
+                    └──────→ M6a steps 1–4 (written, 7bac3ea) ─→ steps 5–10 (next phase) ─→ CI build ─→ M6b (operator, needs G5)
 ```
 M5 and M6a are independent. M6a does not need the hardware results, because its default
 runtime behaviour without provisioning equals Stage 1. M6b should follow M5 step 5, so
@@ -126,6 +132,7 @@ that sensor problems are not confused with network problems.
 | WROVER module, PSRAM on GPIO16/17 (G2) | Check the module marking; alternative pins GPIO25/26 |
 | Stage 2 code fails to compile (never built, no local toolchain) | Pure-C payload part host-testable; API list in §7.3; next phase fixes it from the CI log before anything else |
 | Stage 2 image exceeds the 1 MB app partition | Switch to the single-app-large table (1.5 MB) in M6a step 7 |
+| Another partial M6a phase (as in run #4) leaves CMake without Kconfig, or vice versa, and breaks the Stage 1 build | Steps 5–7 are one atomic change, written before steps 8–10. If time is short, stop before step 5 rather than inside 5–7 |
 | Wi-Fi TX peaks brown out the shared 3V3 rail (G17) | V-12 brownout pattern, V-10 `cks_err`; bulk capacitor on sensor VCC |
 | Network code disturbs the 1 Hz console stream | Depth-1 overwrite queue; publisher prio below reporter; V-13g re-runs V-05 |
 | Credentials leaked into git | Only NVS images or a local `sdkconfig`, both git-ignored; example CSV has placeholders |

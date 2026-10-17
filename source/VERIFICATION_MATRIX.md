@@ -10,6 +10,12 @@ is `NOT VERIFIED` or `DEFERRED`. Nothing has been flashed, run, or measured, and
 tests have not been executed. **CI build evidence is compilation evidence only, not
 hardware verification.**
 
+Run #5, ARCHITECTURE phase (attempt 1), 2026-10-17: there is still no builder result after
+Build #8. Commit `7bac3ea` added partial Stage 2 sources (`components/ha_mqtt/*` without a
+`CMakeLists.txt`, `test/host/test_ha_payload.c`). They are **not in any build and have never
+been compiled or executed**. Traceability for R-08 now points at the written files, and the
+V-09 procedure covers both host test binaries. No check result changed.
+
 Run #4, ARCHITECTURE phase (attempt 1), 2026-10-17: there is no new builder result
 (Build #8 is still the latest), and no source files changed. Stage 2 requirements R-08a…R-08f
 and checks V-13a…V-13g were derived from the new Stage 2 design (SYSTEM_ARCHITECTURE.md §5).
@@ -59,7 +65,11 @@ flashing steps (§4.1).
 | R-05 | `main/main.c` `reporter_task`, `components/level_report/*` | CI-compiled |
 | R-06 | `components/a02yyuw/a02yyuw_parser.c`; `test/host/test_parser.c` | CI-compiled (tests not run) |
 | R-07 | `a02yyuw_get_latest` staleness; `main/main.c` transitions; `a02yyuw.c` filter reset | CI-compiled |
-| R-08, R-08a…f | Planned: `components/ha_mqtt/*`, `main/main.c`, Kconfig, `sdkconfig.defaults`, `tools/nvs_config.example.csv`, `test/host/test_ha_payload.c` (DEVELOPMENT_PLAN.md M6a). Groundwork: `level_report_add_sink` | **Not written** |
+| R-08, R-08b, R-08c | `components/ha_mqtt/ha_payload.c` (topics, discovery, availability), `ha_mqtt.c` (connect/announce, sink, publisher); `test/host/test_ha_payload.c`. Groundwork: `level_report_add_sink` | **Written, not in the build** (no `CMakeLists.txt`, F-22); never compiled; host test never run |
+| R-08a | Runtime gate in `ha_mqtt_start()` (written); `main.c` hook, Kconfig, `sdkconfig.defaults` (**not written**, M6a 5–7) | Partly written |
+| R-08d | `ha_mqtt.c` backoff timer, esp-mqtt reconnect, no abort/restart (written; F-25 open) | Written, not in the build |
+| R-08e | `esp_wifi_set_storage(WIFI_STORAGE_RAM)`, password never logged (written); `.gitignore` entries and the placeholder CSV **not written** (F-24) | Partly written |
+| R-08f | Depth-1 overwrite queue + prio-3 publisher in `ha_mqtt.c` (written) | Written, not in the build |
 
 ## Verification checks
 
@@ -76,13 +86,13 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | V-06 | R-05 | Bench accuracy | Flat rigid target at 300 / 1000 / 2000 mm (tape-measured), 10 readings each | Mean `distance_mm` within ±(10 mm + 1 %) **[ASSUMPTION: tolerance]** | Tape measure, target | NOT VERIFIED |
 | V-07 | R-05 | Bench | Target < 30 mm from the face | `status=OUT_OF_RANGE` or a stable blind-zone value (record which); no crash | Target | NOT VERIFIED |
 | V-08 | R-05 | Field | Sensor over the real tank at max depth (G8), 30 s | `status=OK` throughout; spread ≤ ±20 mm **[ASSUMPTION]** | Tank | NOT VERIFIED |
-| V-09 | R-06, R-08b | Host unit test | `make -C test/host run` | `<N> checks, 0 failures`, exit 0. After M6a it also covers `test_ha_payload.c` | Host C compiler | NOT VERIFIED |
+| V-09 | R-06, R-08b | Host unit test | `make -C test/host run` | Both `./test_parser` and `./test_ha_payload` print `<N> checks, 0 failures` and exit 0 (the Makefile already builds both; `test_ha_payload.c` exists since `7bac3ea`) | Host C compiler | NOT VERIFIED |
 | V-09b | (tooling) | Host self-test | `python3 test/bench/test_check_log.py` | All cases OK, exit 0. Must pass before any `check_log.py` verdict counts as evidence | Python 3.7+ | NOT VERIFIED |
 | V-10 | R-06 | Log (auto: `--check v10`) | Run ≥ 10 min with the sensor connected | `cks_err` < 1 % of `ok` **[ASSUMPTION threshold]**; `uart_ovf` = 0 | Board + sensor | NOT VERIFIED |
 | V-11 | R-07 | Fault injection (partly auto: `--check v11`) | Disconnect the sensor TX wire for ~5 s, then reconnect | One `sensor data lost`; `NO_DATA` within ≤ 2 s; `sensor data available` + `OK` within ≤ 2 s of reconnect (manual timing); no reboot | Board + sensor | NOT VERIFIED |
 | V-12 | R-01..R-07 | Stability (auto: `--check v12`) | Run ≥ 1 h | No `Guru Meditation`, `abort()`, `Task watchdog`, `Brownout detector`, or new `rst:` after the banner; monotonic timestamps | Board + sensor | NOT VERIFIED |
 | V-14 | R-03 | Bench / config | `WT_SENSOR_RX_GPIO=6`, build, flash, observe; then restore 16 | `E a02yyuw: RX GPIO6 is not a usable input ...` then abort/reboot; no silent hang. Optional | Board | NOT VERIFIED |
-| V-13a | R-08a, R-08e | Log + repo inspection | Flash a CI image with HA compiled in, NVS not provisioned; run V-03/V-05 | Exactly one `ha: disabled (...)` line; V-03/V-05 verdicts as with Build #8; no `wifi` lines. Repo/artifact grep finds no SSID or password | Board + sensor | DEFERRED (code not written) |
+| V-13a | R-08a, R-08e | Log + repo inspection | Flash a CI image with HA compiled in, NVS not provisioned; run V-03/V-05 | Exactly one `ha: disabled (...)` line; V-03/V-05 verdicts as with Build #8; no `wifi` lines. Repo/artifact grep finds no SSID or password | Board + sensor | DEFERRED (code partly written, not in the build) |
 | V-13b | R-08 | Log | Provision NVS (§5.3), reboot | `ha: enabled id=wt_xxxxxx ...`, `wifi connected ip=...`, `mqtt connected` within 30 s | Board, Wi-Fi AP, broker | DEFERRED |
 | V-13c | R-08b | HA UI + `mosquitto_sub -v -t 'watertank/#' -t 'homeassistant/#'` | After V-13b | Retained discovery configs present; device "Water tank" with a "Distance" entity (mm) in HA; state updates every ~10 s and matches the UART `distance_mm` | Broker, HA | DEFERRED |
 | V-13d | R-08c | Fault injection | Disconnect the sensor TX for ≥ 15 s, then reconnect | `watertank/<id>/sensor` → `offline` within ≤ 3 s (one report period after NO_DATA); the HA entity becomes unavailable; it returns after reconnect | Broker, HA, sensor | DEFERRED |
@@ -116,7 +126,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 | AC-4 | NOT VERIFIED | Tape measure and target (V-06); tolerance is an assumption |
 | AC-5 | NOT VERIFIED | Manual unplug/replug (V-11, V-03b) |
 | AC-6 | NOT VERIFIED | ≥ 1 h run (V-12) |
-| AC-7 | NOT VERIFIED | Stage 2 code not written (M6a); then Wi-Fi + broker + HA (G5) |
+| AC-7 | NOT VERIFIED | Stage 2 code partly written but not in the build (M6a steps 5–10, F-22); then CI build, Wi-Fi + broker + HA (G5) |
 | AC-8 | NOT VERIFIED | As AC-7, plus AP/broker fault injection |
 
 All eight criteria are still **proposals** (G6) until the operator confirms them.
@@ -134,4 +144,5 @@ All eight criteria are still **proposals** (G6) until the operator confirms them
 | 2026-10-17 | V-01 | Build #7 (`d11d329`) | Same as #5 (size not in the excerpt) | Post-build esptool hint, then the same packaging error |
 | 2026-10-17 | V-01 | Build #8 (`43e0382`, after operator fix `a45bcc0`) | **CI job COMPLETED**. Passes except the "no warnings" sub-criterion. Compilation evidence only | "Artifact nostromo-firmware-8 has been successfully uploaded! Final size is 32716500 bytes. Artifact ID is 12094526795"; zip SHA256 `5d335266a1c0536bd8af73ace958f953ffdf2a2dd79c0ac0bf3cbdecaba31a3b`; 1360 files |
 
-No other check has been executed.
+No other check has been executed. No build result exists for commits `184d5de` or
+`7bac3ea`.
