@@ -9,7 +9,10 @@ Status markers:
 "Written" means source exists. "CI-compiled" means a GitHub Actions build compiled it.
 Nothing has been flashed or run on hardware.
 
-Last updated: run #9, ARCHITECTURE phase (attempt 2), 2026-10-17.
+Last updated: run #9, IMPLEMENTATION phase (attempt 5), 2026-10-17.
+
+**Run #9 implementation:** M8a is written (see the M8a section). It has not been compiled.
+The next step is a CI build. If it fails, fix from the CI log before doing anything else.
 
 **Run #9 architecture:** new input, the verification spec **rev 3**
 (`specifications/verification.md`): "boots correctly", ≥ 10 valid distance readings over
@@ -196,10 +199,14 @@ implementation phase. All defaults are 0, so CI images behave exactly like Build
    section, VERIFICATION_MATRIX V-13h
 Exit: CI build passes. The UART report line is byte-identical (§8).
 
-### M8a — Verification spec rev 3 support (**next IMPLEMENTATION phase**; SYSTEM_ARCHITECTURE.md §4.2)
+### M8a — Verification spec rev 3 support (**written run #9, not yet compiled**; SYSTEM_ARCHITECTURE.md §4.2)
 One phase, file tools only. Do not touch `a02yyuw_parser.c`, `a02yyuw_filter.c`,
 `ha_mqtt` or the format of the §8 report line.
-1. [ ] `components/a02yyuw/a02yyuw.c` (F-33, §4.2.3), RX-task-owned fields in `s_ctx`:
+Status (run #9 implementation, attempts 3–5): steps 1–6 written. Step 4 tests were never
+run. Step 6 was a manual read-through, not a compile. Deviation: the first-OK bound in
+`check_v15` is 3 s, not 2 s, because one tolerated leading NO_DATA line puts the first OK
+just past 2 s (F-34).
+1. [x] `components/a02yyuw/a02yyuw.c` (F-33, §4.2.3), RX-task-owned fields in `s_ctx`:
    `bool locked; uint32_t cks_base, sync_base;`. In `handle_bytes()`, on the first frame
    from `a02yyuw_parser_feed` while `!locked`:
    - set `locked = true`, `cks_base = parser.checksum_err`, `sync_base = parser.sync_skips`;
@@ -212,16 +219,16 @@ One phase, file tools only. Do not touch `a02yyuw_parser.c`, `a02yyuw_filter.c`,
 
    `bytes_rx` there should include the current chunk. Do not rebase `frames_ok`,
    `bytes_rx` or `uart_overflows`. No re-lock.
-2. [ ] `components/a02yyuw/include/a02yyuw.h`: doc comment on `a02yyuw_stats_t` stating
+2. [x] `components/a02yyuw/include/a02yyuw.h`: doc comment on `a02yyuw_stats_t` stating
    the counter origins (§8 "Counter origin")
-3. [ ] `test/bench/check_log.py`: `Log.errors` (every `E` line after the first banner, any
+3. [x] `test/bench/check_log.py`: `Log.errors` (every `E` line after the first banner, any
    tag); `check_v15(...)` per §4.2.4; `v15` in `CHECKS` only (not `DEFAULT_CHECKS`); module
    docstring lists V-15
-4. [ ] `test/bench/test_check_log.py`: PASS ×2, FAIL ×4, INCONCLUSIVE ×1 cases listed in
+4. [x] `test/bench/test_check_log.py`: PASS ×2, FAIL ×4, INCONCLUSIVE ×1 cases listed in
    §4.2.4 (written; **will not be run by the agent**, V-09b)
-5. [ ] README: "Expected console output" gains the `sensor locked` line; "Bench log
+5. [x] README: "Expected console output" gains the `sensor locked` line; "Bench log
    checker" gains `--check v15` and the V-15 procedure
-6. [ ] Self-review: `-Werror=all` (unused variables, format specifiers), the critical
+6. [x] Self-review: `-Werror=all` (unused variables, format specifiers), the critical
    section has no logging inside, and the report line is unchanged
 
 Exit: CI build passes (V-01). Bench V-15 is still the operator's job (M5 step 9).
@@ -237,7 +244,7 @@ Exit: CI build passes (V-01). Bench V-15 is still the operator's job (M5 step 9)
 M0 ─→ M1–M4 (CI-compiled) ─→ M5 (operator, hardware)
                     └──────→ M6a steps 1–10 (written, run #6) ─→ CI Build #9 (compiled) ─→ M6b (operator, needs G5)
                                                                                 └─→ M7a (optional, needs G8)
-spec rev 3 (run #9) ─→ M8a (next impl) ─→ CI build ─→ M5 step 9 / V-15 (operator, needs G25 target)
+spec rev 3 (run #9) ─→ M8a (written run #9) ─→ CI build ─→ M5 step 9 / V-15 (operator, needs G25 target)
 ```
 M5 and M6a are independent. M6a does not need the hardware results, because its default
 runtime behaviour without provisioning equals Stage 1. M6b should follow M5 step 5, so
