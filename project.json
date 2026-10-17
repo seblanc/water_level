@@ -1,6 +1,6 @@
 {
   "bench_id": "2eafbe84783b",
-  "bench_revision_at_snapshot": 1,
+  "bench_revision_at_snapshot": 2,
   "created_at": "2026-10-16T11:48:14.521451+00:00",
   "framework": "ESP-IDF",
   "id": "1a95ca931d72",
