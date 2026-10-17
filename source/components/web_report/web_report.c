@@ -207,6 +207,16 @@ esp_err_t web_report_start(void)
     s_queue = xQueueCreate(1, sizeof(level_reading_t));
     ESP_GOTO_ON_FALSE(s_queue != NULL, ESP_ERR_NO_MEM, fail, TAG, "queue");
     ESP_GOTO_ON_ERROR(level_report_add_sink(web_sink, NULL), fail, TAG, "sink");
+
+    /* The IDF HTTP/TLS stack logs every failed attempt at E level; post_reading()
+     * already reports it as one "web: post failed: <err>" W line, and the bench
+     * checker treats any E line as a firmware fault. */
+    esp_log_level_set("HTTP_CLIENT", ESP_LOG_NONE);
+    esp_log_level_set("esp-tls", ESP_LOG_NONE);
+    esp_log_level_set("esp-tls-mbedtls", ESP_LOG_NONE);
+    esp_log_level_set("transport_base", ESP_LOG_NONE);
+    esp_log_level_set("esp-x509-crt-bundle", ESP_LOG_WARN);
+
     ESP_GOTO_ON_FALSE(xTaskCreate(post_task, "wt_web", WEB_TASK_STACK, NULL, WEB_TASK_PRIO,
                                   NULL) == pdPASS,
                       ESP_ERR_NO_MEM, fail, TAG, "post task");

@@ -1,0 +1,11 @@
+# Apache 2.4: the helper/settings files are never served directly.
+# (They also refuse direct access in PHP; this is a second layer.)
+DirectoryIndex index.php
+Options -Indexes
+
+<FilesMatch "^(config|db)\.php$">
+    Require all denied
+</FilesMatch>
+<FilesMatch "\.(sqlite|md)$">
+    Require all denied
+</FilesMatch>

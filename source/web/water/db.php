@@ -100,6 +100,59 @@ function wt_level_percent(?int $distance_mm): ?float
     return round(max(0.0, min(100.0, $pct)), 1);
 }
 
+/* Newest row as shown by index.php / api.php, or null when the table is empty. */
+function wt_latest(): ?array
+{
+    $t = wt_table();
+    $row = wt_db()->query("SELECT * FROM $t ORDER BY id DESC LIMIT 1")->fetch();
+    if (!$row) {
+        return null;
+    }
+    $cfg = wt_config();
+    $dist = $row['distance_mm'] === null ? null : (int)$row['distance_mm'];
+    $at = (int)$row['received_at'];
+    $age = max(0, time() - $at);
+    return [
+        'received_at' => $at,
+        'received_iso' => date('c', $at),
+        'age_s' => $age,
+        'stale' => $age > (int)($cfg['stale_after_s'] ?? 300),
+        'status' => (string)$row['status'],
+        'distance_cm' => $dist === null ? null : round($dist / 10.0, 1),
+        'level_pct' => wt_level_percent($dist),
+        'rssi' => $row['rssi'] === null ? null : (int)$row['rssi'],
+        'uptime_s' => $row['uptime_s'] === null ? null : (int)$row['uptime_s'],
+        'fw' => (string)($row['fw'] ?? ''),
+        'device' => (string)$row['device'],
+    ];
+}
+
+/*
+ * Level history for the last $hours, averaged into at most $points buckets.
+ * Returns [[unix_time, level_pct], ...] in time order; NO_DATA rows are skipped.
+ */
+function wt_history(int $hours, int $points = 300): array
+{
+    $t = wt_table();
+    $since = time() - $hours * 3600;
+    $bucket = max(60, intdiv($hours * 3600, $points));
+    $stmt = wt_db()->prepare("SELECT received_at, distance_mm FROM $t
+        WHERE received_at >= ? AND distance_mm IS NOT NULL ORDER BY received_at");
+    $stmt->execute([$since]);
+
+    $sums = [];
+    while ($r = $stmt->fetch()) {
+        $b = intdiv((int)$r['received_at'] - $since, $bucket);
+        $sums[$b][0] = ($sums[$b][0] ?? 0) + (int)$r['distance_mm'];
+        $sums[$b][1] = ($sums[$b][1] ?? 0) + 1;
+    }
+    $out = [];
+    foreach ($sums as $b => [$sum, $n]) {
+        $out[] = [$since + $b * $bucket + intdiv($bucket, 2), wt_level_percent((int)round($sum / $n))];
+    }
+    return $out;
+}
+
 function wt_json(array $data, int $code = 200): void
 {
     http_response_code($code);
