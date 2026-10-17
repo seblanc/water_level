@@ -4,8 +4,9 @@ Stage 1 firmware: reads a DFRobot A02YYUW waterproof ultrasonic sensor over UART
 prints the distance on the USB console once per second. Stage 2 (Home Assistant) is
 planned but not implemented yet. See `SYSTEM_ARCHITECTURE.md` §5.
 
-> **Status:** source written, **not compiled, flashed or tested yet**. The authoring
-> environment had no toolchain or hardware. See `VERIFICATION_MATRIX.md`.
+> **Status:** **compiled in CI only** (GitHub Actions Build #8, IDF v5.4.2, artifact
+> `nostromo-firmware-8`). It has **not been flashed or tested on hardware yet**, and the host
+> tests have not been run. See `VERIFICATION_MATRIX.md`.
 
 ## Wiring (default, configurable)
 

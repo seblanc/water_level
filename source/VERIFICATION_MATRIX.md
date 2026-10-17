@@ -4,9 +4,21 @@ The ACCEPTANCE spec is empty (revision 1) and there are no structured requiremen
 The requirements and acceptance criteria below are **derived** from PURPOSE, FLASHING and
 TELEMETRY revision 1. They are **proposals that need operator confirmation** (gap G6).
 
-**Only one check has partial evidence:** V-01 compile step (CI Builds #5–#7, see the results
-log). Every other result is `NOT VERIFIED` (or `DEFERRED`). Nothing has been flashed, run,
-or measured, and the host tests have not been executed.
+**Only one check has evidence:** V-01, the CI build (Build #8 job completed, artifact
+uploaded; the "no warnings" sub-criterion is still unconfirmed). Every other result is
+`NOT VERIFIED` (or `DEFERRED`). Nothing has been flashed, run, or measured, and the host
+tests have not been executed. **CI build evidence is compilation evidence only, not
+hardware verification.**
+
+Run #3, REVIEW phase (attempt 9), 2026-10-17: the operator committed a workflow fix
+(`a45bcc0`). A read-only check shows `git config --global --add safe.directory
+"$GITHUB_WORKSPACE"` at `.github/workflows/nostromo-build.yml` line 42. GitHub Actions
+**Build #8** (commit `43e0382`) then **completed**, and the artifact `nostromo-firmware-8`
+was uploaded. F-19 is resolved. The supplied excerpt covers only the upload and cleanup
+steps, so the image size and compile warnings are not visible for #8. Attempts 6–8 changed
+documentation only, so #8 compiled the same sources that #5 compiled. A static re-review of
+`main/main.c` and `components/a02yyuw/a02yyuw.c` found no defects, so source files are
+unchanged in this phase.
 
 Run #3, IMPLEMENTATION phase (attempt 8), 2026-10-17: GitHub Actions Build #7 (commit
 `d11d329`) failed the same way, for the third time in a row. The visible log tail begins with
@@ -109,7 +121,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | Check | Req | Method | Procedure | Pass criterion | Needs | Result |
 |-------|-----|--------|-----------|----------------|-------|--------|
-| V-01 | R-01 | Build (GitHub Actions) | Commit `source/`, then the CI build runs (equivalent to `idf.py set-target esp32 && idf.py build`) | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version (and so which F-12 branch, `driver` or `esp_driver_*`, was exercised) and the artifact list | Clean committed worktree + CI with IDF v5.x | **PARTIAL** (Build #5): compile + link OK on IDF v5.4.2 (`esp_driver_*` branch of F-12), `water_tank.bin` produced. Job FAILED afterwards in the platform packaging step (F-19), so no artifacts. "No warnings from project sources" not confirmable: the supplied log excerpt starts at step 960/1004. Builds #1–#4 blocked |
+| V-01 | R-01 | Build (GitHub Actions) | Commit `source/`, then the CI build runs (equivalent to `idf.py set-target esp32 && idf.py build`) | CI job succeeds, `water_tank.bin` produced, no warnings from project sources. Record the IDF version (and so which F-12 branch, `driver` or `esp_driver_*`, was exercised) and the artifact list | Clean committed worktree + CI with IDF v5.x | **PASS except warning scan** (Build #8, `43e0382`): CI job completed and artifact `nostromo-firmware-8` was uploaded (1360 files). Compile evidence from Build #5: IDF v5.4.2 (`esp_driver_*` branch of F-12), `water_tank.bin` 0x35210 bytes. "No warnings from project sources" is NOT VERIFIED: no supplied excerpt includes the early compile steps. Builds #1–#4 blocked, #5–#7 failed in packaging (F-19) |
 | V-02 | R-02 | Bench | `idf.py -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 flash`, or from the CI `build/` artifacts: `python -m esptool --chip esp32 -p <port> write_flash @flash_args` | esptool prints "Hash of data verified" for each segment and the board resets into the app | Board + USB | NOT VERIFIED |
 | V-03 | R-03 | Bench / log (auto: `check_log.py --check v03`) | Sensor connected; `idf.py -p <port> monitor`, capture to a file | Banner shows `rx_gpio=16 tx_gpio=17 baud=9600`; within 2 s, `status=OK` lines appear with `ok=` increasing. On failure, record `rx_bytes`/`line_err` (README troubleshooting table) | Board + sensor | NOT VERIFIED |
 | V-03b | R-07 | Bench / log (auto: `--check v03b`) | Boot with the sensor **disconnected** | Banner printed; one `sensor data lost` warning; `status=NO_DATA distance_mm=-1 age_ms=-1 ok=0` lines at 1 Hz; no reboot | Board | NOT VERIFIED |
@@ -148,7 +160,7 @@ Report-line fields and parsing rules are defined in SYSTEM_ARCHITECTURE.md §8.
 
 | AC | State | Blocking item |
 |----|-------|---------------|
-| AC-1 | NOT VERIFIED | Build half: Builds #5, #6 and #7 compiled and linked without errors on IDF v5.4.2, but both CI jobs failed in packaging (F-19), and project-source warnings cannot be checked from the truncated log. Host half: V-09/V-09b never executed (no host compiler). Earlier: Build #1 blocked (F-15), #2/#3 (403, F-17), #4 (`workflow` scope, F-18) |
+| AC-1 | NOT VERIFIED (build half passed in CI) | Build half: Build #8 CI job completed with the artifact uploaded. This is CI evidence only, and project-source warnings are unchecked (truncated logs). Builds #5–#7 compiled but failed in packaging (F-19, now resolved). Host half: V-09/V-09b never executed (no host compiler). Earlier: Build #1 blocked (F-15), #2/#3 (403, F-17), #4 (`workflow` scope, F-18) |
 | AC-2 | NOT VERIFIED | No hardware access (V-02) |
 | AC-3 | NOT VERIFIED | Needs board + sensor + log capture (V-03, V-05); pin direction G1 unconfirmed |
 | AC-4 | NOT VERIFIED | Needs tape measure and target (V-06); tolerance is an assumption |
@@ -168,5 +180,6 @@ All six criteria are also still **proposals** (G6) until the operator confirms t
 | 2026-10-17 | V-01 | GitHub Actions Build #5 (commit `d587225`, `espressif/idf:v5.4.2`) | **Compile + link PASSED; CI job FAILED** (post-build packaging step, F-19). The firmware image was produced but not uploaded. Not a full V-01 pass | CI log: "[1004/1004] … Project build complete", "water_tank.bin binary size 0x35210 bytes. Smallest app partition is 0x100000 bytes. 0xcadf0 bytes (79%) free.", then "fatal: detected dubious ownership in repository at '/__w/water_level/water_level'" → "Process completed with exit code 128". Project objects built: `a02yyuw.c`, `a02yyuw_parser.c`, `a02yyuw_filter.c`, `level_report.c`, `level_report_uart.c`, `main.c` |
 | 2026-10-17 | V-01 | GitHub Actions Build #6 (commit `b05cc7f`, `espressif/idf:v5.4.2`) | **Compile + link PASSED; CI job FAILED**, the same as Build #5 (F-19). The workflow was not changed between builds. Not a full V-01 pass | CI log: "[1004/1004] … Project build complete", "water_tank.bin binary size 0x35210 bytes … 0xcadf0 bytes (79%) free.", then "fatal: detected dubious ownership in repository at '/__w/water_level/water_level'" → "Process completed with exit code 128" |
 | 2026-10-17 | V-01 | GitHub Actions Build #7 (commit `d11d329`) | **Build step appears complete; CI job FAILED** (F-19, third time in a row). The workflow was still unchanged. Not a full V-01 pass. The image size is not in the truncated excerpt | CI log tail: post-build hint "python -m esptool --chip esp32 … write_flash … 0x10000 source/build/water_tank.bin", then "fatal: detected dubious ownership in repository at '/__w/water_level/water_level'" → "Process completed with exit code 128" |
+| 2026-10-17 | V-01 | GitHub Actions Build #8 (commit `43e0382`, after operator workflow fix `a45bcc0`) | **CI job COMPLETED**. F-19 resolved. V-01 passes except the unconfirmed "no warnings" sub-criterion. Compilation evidence only, with no hardware involved | Builder status "completed". CI log: "With the provided path, there will be 1360 files uploaded", "Artifact nostromo-firmware-8 has been successfully uploaded! Final size is 32716500 bytes. Artifact ID is 12094526795", SHA256 of zip `5d335266a1c0536bd8af73ace958f953ffdf2a2dd79c0ac0bf3cbdecaba31a3b`. The compile-step lines are not in the excerpt |
 
 No other check has been executed.

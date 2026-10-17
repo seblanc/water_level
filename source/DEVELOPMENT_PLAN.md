@@ -79,7 +79,13 @@ Last updated: run #3, IMPLEMENTATION phase (attempt 5), 2026-10-17.
 ### M4j — Run #3 implementation (attempt 8; documentation only)
 - [x] Recorded Build #7 (`d11d329`): the third identical F-19 failure. The build step reached the post-build flash hint, then packaging failed on "dubious ownership". No source changes
 - [x] Read-only check: workflow lines 53/97 are still unchanged
-- [ ] Operator (**blocking**, unchanged since M4h): add `git config --global --add safe.directory "$GITHUB_WORKSPACE"` as the first command in both `run:` blocks that call `git rev-parse HEAD` (lines 53 and 97), or replace those calls with `echo "${{ github.sha }}"`. Further agent attempts cannot change the outcome until this is done
+- [ ] Operator (**blocking**, unchanged since M4h): add `git config --global --add safe.directory "$GITHUB_WORKSPACE"` as the first command in both `run:` blocks that call `git rev-parse HEAD` (lines 53 and 97), or replace those calls with `echo "${{ github.sha }}"`. Further agent attempts cannot change the outcome until this is done. **Done by the operator in `a45bcc0`** (see M4k)
+
+### M4k — Run #3 review (attempt 9; documentation only)
+- [x] Recorded Build #8 (`43e0382`): **CI job completed**. Artifact `nostromo-firmware-8` was uploaded (1360 files, 32,716,500 bytes, ID 12094526795). F-19/G16 resolved by the operator's workflow commit `a45bcc0` (`safe.directory` at workflow line 42, read-only check)
+- [x] Static re-review of `main.c` and `a02yyuw.c` against R-03/R-05/R-07: no defects found, so there are no source changes. The sources compiled in #8 are the same ones that compiled in #5 (attempts 6–8 changed documentation only)
+- [ ] Operator: download `nostromo-firmware-8` and flash it (V-02), or flash a local build. This is now the critical path
+- [ ] Operator/next phase: supply the full Build #8 compile log so it can be scanned for warnings from `components/` and `main/` (V-01 "no warnings" criterion). The excerpt supplied for #8 shows only the upload/cleanup steps
 
 ### M5 — Build and bench verification (needs a toolchain and hardware; operator or a bench-enabled phase)
 Ordered procedure. Stop at the first failure and record it in VERIFICATION_MATRIX.md:
@@ -89,12 +95,13 @@ Build #1 was blocked by the dirty worktree (F-15, G12). The platform has since c
 the tree (`65c6ad9`, `3e2dc04`), and it is expected to commit this phase's changes as well.
 Builds #2 and #3 then failed at `git push` with HTTP 403 (F-17, G14). Build #4 got past the
 403 but was rejected because the token has no `workflow` scope (F-18, G15). Build #5 got through
-push and compile, then failed in the workflow's packaging step (F-19, G16), and V-01 is
-still open until that workflow step is fixed.
+push and compile, then failed in the workflow's packaging step (F-19, G16). After the
+operator's workflow fix (`a45bcc0`), Build #8 completed and uploaded `nostromo-firmware-8`.
+Only the "no warnings" part of V-01 is still unconfirmed.
 
 0. [ ] V-04 wiring inspection **before power-up** (sensor TX → GPIO16; F-13)
 1. [ ] V-09 `make -C test/host run`, and V-09b `python3 test/bench/test_check_log.py`
-2. [ ] V-01 GitHub Actions build of the committed tree (equivalent to `idf.py set-target esp32 && idf.py build`). Record the IDF version and the artifact list from the CI log (resolves G4, G13, F-10). On a compile error, the next IMPLEMENTATION phase fixes it from the CI log
+2. [~] (Build #8 job completed, artifact uploaded; warning scan pending) V-01 GitHub Actions build of the committed tree (equivalent to `idf.py set-target esp32 && idf.py build`). Record the IDF version and the artifact list from the CI log (resolves G4, G13, F-10). On a compile error, the next IMPLEMENTATION phase fixes it from the CI log
 3. [ ] V-02 flash the CI artifacts (`esptool write_flash @flash_args`) or a local build (`idf.py -p /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 flash`)
 4. [ ] V-03b boot **without** the sensor → banner + NO_DATA, no crash (`check_log.py --check v03b`)
 5. [ ] V-03 boot with the sensor → `status=OK` (resolves G1; if `ok=0`, use `rx_bytes` to tell wiring from protocol problems)
@@ -120,8 +127,8 @@ M5 steps 3–7 need the board on the "Simple UART" bench + the sensor
 ```
 
 ## Constraints
-- The agent environment so far has no shell, compiler, or hardware access. Code is written
-  but **not compiled or flashed**. M5 results must come from a real execution, with log
+- The agent environment so far has no shell, compiler, or hardware access. Code is
+  **compiled in CI only (Builds #5–#8), never flashed**. M5 results must come from a real execution, with log
   excerpts as evidence. They must never be inferred.
 - Keep `a02yyuw_parser` and `a02yyuw_filter` free of IDF dependencies.
 - Keep the §8 report line backward-compatible: only append fields.
