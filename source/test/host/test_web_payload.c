@@ -311,6 +311,11 @@ static void test_parse_page(void)
     CHECK(g.distance_mm == 123 && g.uptime_s == 5 && g.count == -1);
     web_payload_parse_page("{\"ok\":true,\"latest\":{\"distance_cm\":12,\"uptime_s\":null}}", &g);
     CHECK(g.distance_mm == 120 && g.uptime_s == -1 && g.device[0] == '\0');
+    /* Old PHP float output (serialize_precision 17). */
+    web_payload_parse_page("{\"ok\":true,\"latest\":{\"distance_cm\":0.69999999999999996}}", &g);
+    CHECK(g.distance_mm == 7);
+    web_payload_parse_page("{\"ok\":true,\"latest\":{\"distance_cm\":175.30000000000001}}", &g);
+    CHECK(g.distance_mm == 1753);
     web_payload_parse_page("{\"ok\":true,\"latest\":{\"distance_cm\":null}}", &g);
     CHECK(g.has_latest && g.distance_mm == -1);
 

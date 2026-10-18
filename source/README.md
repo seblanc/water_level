@@ -132,8 +132,28 @@ succeeds appends `, after <k> failed tries`. On errors you see `web: post failed
 `web: post rejected: row <id> read back with other values (…)` or
 `web: post rejected: http <code>, reply not from post.php (<body text>)` (hosting error
 page, PHP fatal error or PHP not executed; since run #24 the start of the body is shown,
-tags and `=` removed, at most 95 characters, `empty body` if there was none, `no text in first <n> bytes` if the 319 bytes kept were
+tags and `=` removed, at most 95 characters, `empty body` if there was none, `no text in first <n> bytes` if the bytes kept
+(319 until run #24, 2047 since run #25) were
 all markup, e.g. a long `<style>` block). One W line per outage; retries every 15 s. The key and the Wi-Fi password are never logged.
+
+**Page check (since run #25).** After a stored post the firmware also fetches
+`<post url directory>api.php?hours=1`, the JSON that `index.php` draws from
+(`https://randoresto.ch/water/api.php?hours=1` for the default URL), and compares its
+`latest` reading (device, uptime, distance) with the post it just sent. Boot line:
+`web: page check: https://randoresto.ch/water/api.php after the first stored post, then every 10 posts`.
+Results:
+- `web: page ok: https://randoresto.ch/water/ shows this post as latest reading, <n> readings in the last hour`
+  — the web page has the data.
+- `web: page check: … shows no data although the post was stored (…)` — `api.php` reads
+  another database/table than `post.php` (two different `config.php` on the server).
+- `web: page check: … latest reading is not this post: device … uptime … (…), sent …` —
+  another device or an older row is newest (e.g. clock or ordering problem).
+- `web: page check failed: …api.php http <code> (<error>)`, `… reply not from api.php (<text>)`
+  or `…api.php <transport error>`.
+
+The check runs after every stored post until it succeeds, then every 10th stored post; a
+failure gives one W line until the next success. It reads `api.php`, not the rendered
+HTML, so a browser-side problem (JavaScript error, cached page) is not detected.
 
 **Credentials in `sdkconfig.defaults`:** at the operator's request, the Wi-Fi SSID and
 password and the web API key are in `sdkconfig.defaults` so that CI artifacts work

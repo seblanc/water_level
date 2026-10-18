@@ -345,19 +345,18 @@ int web_payload_page_dir(char *dst, size_t size, const char *post_url)
     return (int)n;
 }
 
-/* Non-negative decimal in tenths ("12.3" -> 123, "12" -> 120), -1 if null or absent. */
+/*
+ * Non-negative decimal in tenths, rounded ("12.3" -> 123, "12" -> 120,
+ * "0.69999999999999996" -> 7: PHP < 7.1 json_encode prints 17 digits),
+ * -1 if null or absent.
+ */
 static int64_t json_tenths(const char *body, const char *name)
 {
     const char *v = json_value(body, name);
     if (v == NULL || *v < '0' || *v > '9') {
         return -1;
     }
-    char *end;
-    int64_t tenths = (int64_t)strtoll(v, &end, 10) * 10;
-    if (end[0] == '.' && end[1] >= '0' && end[1] <= '9') {
-        tenths += end[1] - '0';
-    }
-    return tenths;
+    return (int64_t)(strtod(v, NULL) * 10.0 + 0.5);
 }
 
 int web_payload_parse_page(const char *body, web_page_t *out)
