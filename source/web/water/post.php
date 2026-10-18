@@ -90,7 +90,7 @@ if ($dsn === '' || strpos($dsn, 'YOUR_DB') !== false
 /*
  * Short cause for the 500 reply, e.g. "database open HY000 1045" (stage,
  * SQLSTATE, driver code). The firmware logs it in its "post rejected" line
- * (max 31 characters, letters/digits/space kept); the full message goes to the
+ * (max 31 characters, only [A-Za-z0-9 ._-] kept); the full message goes to the
  * PHP error log only.
  */
 function db_error(string $stage, Throwable $e): string
