@@ -31,6 +31,8 @@
 #define WEB_NVS_NAMESPACE    "wt_cfg"
 #define WEB_URL_MAX          160
 #define WEB_KEY_MAX          65
+/* Body excerpt in the "reply not from post.php" W line, NUL included. */
+#define WEB_EXCERPT_LEN      96
 
 static const char *TAG = "web";
 
@@ -248,13 +250,19 @@ static void post_task(void *arg)
                     ESP_LOGW(TAG, "post rejected: row %" PRId64 " read back with other values "
                              "(%" PRId64 " mm, uptime %" PRId64 " s)", reply.id,
                              reply.distance_mm, reply.uptime_s);
-                } else if (status == 200) {
-                    ESP_LOGW(TAG, "post rejected: http 200 but the reply is not from post.php");
-                } else if (status > 0) {
+                } else if (status > 0 && reply.error[0] != '\0') {
                     /* 3xx = URL redirects, 401 = wrong API key, 404 = wrong URL,
                      * 5xx = server/database; post.php names the cause in "error". */
-                    ESP_LOGW(TAG, "post rejected: http %d (%s)", status,
-                             reply.error[0] != '\0' ? reply.error : "no server message");
+                    ESP_LOGW(TAG, "post rejected: http %d (%s)", status, reply.error);
+                } else if (status > 0) {
+                    /* Not post.php's JSON (hosting error page, PHP fatal error,
+                     * unexecuted file): show the start of the body instead. */
+                    char excerpt[WEB_EXCERPT_LEN];
+                    if (web_payload_body_excerpt(excerpt, sizeof(excerpt), s_body.buf) <= 0) {
+                        strlcpy(excerpt, "empty body", sizeof(excerpt));
+                    }
+                    ESP_LOGW(TAG, "post rejected: http %d, reply not from post.php (%s)", status,
+                             excerpt);
                 } else {
                     ESP_LOGW(TAG, "post failed: %s", esp_err_to_name(err));
                 }

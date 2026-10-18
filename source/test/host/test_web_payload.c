@@ -226,6 +226,45 @@ static void test_check_stored(void)
     CHECK(web_payload_check_stored(&r, NULL) == WEB_STORE_FAILED);
 }
 
+static void test_body_excerpt(void)
+{
+    char out[96];
+
+    /* Hosting error page: tags and <style> content gone, text kept. */
+    CHECK(web_payload_body_excerpt(out, sizeof(out),
+                                   "<html><head><style>body{color:red}</style></head><body>"
+                                   "<h1>500 Internal Server Error</h1>"
+                                   "<p>The server encountered an error.</p></body></html>") > 0);
+    CHECK(strcmp(out, "500 Internal Server Error The server encountered an error.") == 0);
+    CHECK(web_payload_body_excerpt(out, sizeof(out), "<STYLE>p{}</STYLE>Hi") == 2);
+    CHECK(strcmp(out, "Hi") == 0);
+
+    /* PHP error text; '=' and '&' entities never reach the log. */
+    web_payload_body_excerpt(out, sizeof(out), "\n<b>Fatal error</b>:  x");
+    CHECK(strcmp(out, "Fatal error : x") == 0);
+    web_payload_body_excerpt(out, sizeof(out), "a=b&amp;c&lt;d");
+    CHECK(strcmp(out, "a b c d") == 0);
+    web_payload_body_excerpt(out, sizeof(out), "a & b");
+    CHECK(strcmp(out, "a b") == 0);
+
+    /* Body cut off inside a tag or a <script>. */
+    web_payload_body_excerpt(out, sizeof(out), "ok <div class");
+    CHECK(strcmp(out, "ok") == 0);
+    web_payload_body_excerpt(out, sizeof(out), "x<script>var a");
+    CHECK(strcmp(out, "x") == 0);
+
+    /* Truncation, then the trailing blank trimmed. */
+    CHECK(web_payload_body_excerpt(out, 8, "abcdefghij") == 7);
+    CHECK(strcmp(out, "abcdefg") == 0);
+    CHECK(web_payload_body_excerpt(out, 5, "abc defg") == 3);
+    CHECK(strcmp(out, "abc") == 0);
+
+    CHECK(web_payload_body_excerpt(out, sizeof(out), "") == 0 && out[0] == '\0');
+    CHECK(web_payload_body_excerpt(out, sizeof(out), NULL) == 0 && out[0] == '\0');
+    CHECK(web_payload_body_excerpt(out, 0, "x") == -1);
+    CHECK(web_payload_body_excerpt(NULL, sizeof(out), "x") == -1);
+}
+
 int main(void)
 {
     test_urlencode();
@@ -235,6 +274,7 @@ int main(void)
     test_form_encoding_and_limits();
     test_parse_reply();
     test_check_stored();
+    test_body_excerpt();
 
     if (s_failures != 0) {
         fprintf(stderr, "test_web_payload: %d of %d checks FAILED\n", s_failures, s_checks);

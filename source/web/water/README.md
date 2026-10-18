@@ -62,7 +62,7 @@ The ESP32 prints it in its UART line `web: post rejected: http 500 (<error>)`.
 | `database open 42000 1142` | User may not `CREATE TABLE` | Grant CREATE, or create the table by hand (schema in `db.php`) |
 | `database insert 42S22 1054` | Table from an older version lacks a column | Add the column (see `db.php`) or drop the empty table |
 | `readback <field>` | Row stored, but read back with another value | Check column types against `db.php` |
-| `no server message` (firmware text) | PHP did not run or crashed before replying | PHP error log; PHP ≥ 7.4 with PDO needed |
+| `reply not from post.php (<text>)` (firmware text, since run #24; was `no server message`) | PHP did not run or crashed before replying; `<text>` is the start of the page (e.g. `Fatal error : Uncaught PDOException ...`, `500 Internal Server Error ...`) or `empty body` | Read `<text>`; PHP error log; PHP ≥ 7.4 with PDO needed |
 
 Delete test rows afterwards (`DELETE FROM water_readings WHERE device='0123456789ab'`).
 
