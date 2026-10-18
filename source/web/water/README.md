@@ -48,6 +48,21 @@ only answers `"ok":true` when the stored values match the request; otherwise it 
 `uptime_s` against what it sent and only then logs the post as stored. The page header of the history
 chart shows how many readings arrived in the selected period. Wrong key → 401, missing/invalid field → 400,
 database problem → 500 (details in the server's PHP error log).
+
+### HTTP 500: what the `error` text means (since run #23)
+
+The ESP32 prints it in its UART line `web: post rejected: http 500 (<error>)`.
+
+| `error` | Cause | Fix |
+|---|---|---|
+| `server not configured` | `config.php` still has `YOUR_DB…` placeholders (repository copy uploaded) | Put the real `db_dsn`/`db_user`/`db_pass` in `config.php` on the server |
+| `database open HY000 1045` | Wrong database user/password | `db_user`/`db_pass` |
+| `database open HY000 1049` | Unknown database name | `dbname=` in `db_dsn` |
+| `database open HY000 2002` | Database host unreachable | `host=` in `db_dsn` (often `localhost`) |
+| `database open 42000 1142` | User may not `CREATE TABLE` | Grant CREATE, or create the table by hand (schema in `db.php`) |
+| `database insert 42S22 1054` | Table from an older version lacks a column | Add the column (see `db.php`) or drop the empty table |
+| `readback <field>` | Row stored, but read back with another value | Check column types against `db.php` |
+| `no server message` (firmware text) | PHP did not run or crashed before replying | PHP error log; PHP ≥ 7.4 with PDO needed |
 Delete test rows afterwards (`DELETE FROM water_readings WHERE device='0123456789ab'`).
 
 ## Requirements / assumptions
