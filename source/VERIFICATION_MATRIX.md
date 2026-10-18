@@ -61,6 +61,14 @@ no defect, so no source change:
 Known limit: a page check costs one extra TLS request after a stored post (in the `wt_web`
 task, not the 1 Hz reporter). Not flashed; randoresto.ch/water not opened by any agent.
 
+Run #25, REVIEW phase (attempt 6), 2026-10-18: **Build #23 (`7e0734d`) completed**
+(artifact `nostromo-firmware-23`, 36010757 B). Since `8935375` only this file changed, so the
+firmware matches Build #22. Either artifact can be flashed. The 12:12 acceptance report shows
+`http 500` again with no W line text, so the server-side cause is still unknown. A 500 comes
+from the server, so a firmware change cannot fix it. No source change in this attempt.
+Blockers, all operator actions: upload the `web/water/` PHP (run #23 diagnostics) with a real
+`config.php`, flash -22/-23, and capture the `web: post …` / `web: page …` lines.
+
 Run #18, REVIEW phase, 2026-10-17: operator asked for the hostname `espwatertank` (R-12).
 **Build #17 (`080af2e`, current HEAD, clean worktree) completed** (artifact
 `nostromo-firmware-17`, 35936529 B, 1372 files), so the change compiles and links. Static
@@ -454,6 +462,8 @@ operator-defined (verification spec rev 3).
 | 2026-10-18 | V-01 | Build #20 (`4ab482d`, first build with run #24 `web_payload_body_excerpt()` and the `reply not from post.php (<text>)` W line) | **CI job COMPLETED**. Compile, link and partition fit implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only; not flashed; host tests not run by CI. The run #24 review fix in `web_report.c` came later and is not in this build | "Artifact nostromo-firmware-20 has been successfully uploaded! Final size is 35959118 bytes. Artifact ID is 12135461177"; zip SHA256 `adfe706b0aa2429eb0dd3d2813cd6d9e09a8d9354f840ee966e557009de08095`; 1372 files |
 | 2026-10-18 | V-01 | Build #21 (`cc81c1e`, adds the run #24 review fix: `no text in first <n> bytes` instead of `empty body`) | **CI job COMPLETED**. Compile, link and partition fit implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only; not flashed; host tests not run by CI | "Artifact nostromo-firmware-21 has been successfully uploaded! Final size is 35959671 bytes. Artifact ID is 12135916546"; zip SHA256 `c666617e67233a51a606722bb6e5d431300b071355bf168127e777baf8ebd923`; 1372 files |
 | 2026-10-18 | V-01 | Build #22 (`8935375`, first build with the run #25 page check `web: page ok:` and the 2048 B reply buffer) | **CI job COMPLETED**. Compile, link and partition fit implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only; not flashed; host tests (V-25a) not run by CI | "Artifact nostromo-firmware-22 has been successfully uploaded! Final size is 36010734 bytes. Artifact ID is 12136251962"; zip SHA256 `650ebb19dd204bf4b7c3237d92061647f4f6497796a58ce017f2586548022d81`; 1372 files |
+| 2026-10-18 | Platform acceptance run (guidance timestamp 12:12; image not named in the report) | Hardware UART + manual checks | **FAILED** again with `uart_http`: "Device reported HTTP statuses: [500]"; other 11 checks `not_verified`. The report again omits the device's W line text, so the cause is still unknown. It is not stated whether the flashed image had the run #24 excerpt (Build #20 or later) | No firmware change can fix a server-side 500. The `post rejected` W line from artifact -22/-23 plus the run #23 `post.php` (once uploaded) names the cause |
+| 2026-10-18 | V-01 | Build #23 (`7e0734d`, run #25 review commit; only `VERIFICATION_MATRIX.md` changed since `8935375`, so same firmware as #22) | **CI job COMPLETED**. Same firmware conclusions as #22. Compilation evidence only; not flashed | "Artifact nostromo-firmware-23 has been successfully uploaded! Final size is 36010757 bytes. Artifact ID is 12135684969"; zip SHA256 `80311395a84c17c3c3d28aa6930c4fe08eef7a4febec20c5cebdfcdbb94ba54f`; 1372 files |
 
 No other check has been executed. No build result exists for commits `184d5de`,
 `7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and
