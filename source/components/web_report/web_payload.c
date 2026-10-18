@@ -220,3 +220,92 @@ web_store_t web_payload_check_stored(const web_reply_t *reply, const web_post_t 
     }
     return WEB_STORE_CONFIRMED;
 }
+
+/* ---- body excerpt for the log ---- */
+
+static bool is_alnum(char c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+}
+
+static bool excerpt_safe(char c)
+{
+    /* strchr() also matches the terminating NUL, hence the c != '\0' test. */
+    return is_alnum(c) || (c != '\0' && strchr(" .,:;/()[]'_-", c) != NULL);
+}
+
+/* p points just after '<': true if the tag is <name> or <name ...>, any case. */
+static bool tag_is(const char *p, const char *name)
+{
+    size_t n = strlen(name);
+    for (size_t i = 0; i < n; i++) {
+        char c = p[i];
+        if (c >= 'A' && c <= 'Z') {
+            c = (char)(c - 'A' + 'a');
+        }
+        if (c != name[i]) {
+            return false;  /* also stops at the terminating NUL */
+        }
+    }
+    char e = p[n];
+    return e == '>' || e == ' ' || e == '\t' || e == '\r' || e == '\n' || e == '/';
+}
+
+int web_payload_body_excerpt(char *dst, size_t size, const char *body)
+{
+    if (dst == NULL || size == 0) {
+        return -1;
+    }
+    size_t n = 0;
+    dst[0] = '\0';
+    if (body == NULL) {
+        return 0;
+    }
+    bool blank = true;  /* suppresses leading and repeated blanks */
+    const char *p = body;
+    while (*p != '\0' && n + 1 < size) {
+        char c = *p;
+        if (c == '<') {
+            bool raw = tag_is(p + 1, "style") || tag_is(p + 1, "script");
+            const char *end = strchr(p, '>');
+            if (end == NULL) {
+                break;  /* tag cut off at the end of the captured body */
+            }
+            p = end + 1;
+            if (raw) {
+                const char *close = strstr(p, "</");
+                if (close == NULL) {
+                    break;
+                }
+                p = close;
+            }
+            c = ' ';
+        } else if (c == '&') {
+            const char *e = p + 1;
+            while (e < p + 9 && (is_alnum(*e) || *e == '#')) {
+                e++;
+            }
+            p = (*e == ';') ? e + 1 : p + 1;
+            c = ' ';
+        } else {
+            p++;
+            if (!excerpt_safe(c)) {
+                c = ' ';
+            }
+        }
+        if (c == ' ') {
+            if (!blank) {
+                dst[n++] = ' ';
+                blank = true;
+            }
+        } else {
+            dst[n++] = c;
+            blank = false;
+        }
+    }
+    while (n > 0 && dst[n - 1] == ' ') {
+        n--;
+    }
+    dst[n] = '\0';
+    return (int)n;
+}

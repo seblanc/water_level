@@ -87,6 +87,16 @@ typedef enum {
 /* Classify a parsed reply against the post that produced it. */
 web_store_t web_payload_check_stored(const web_reply_t *reply, const web_post_t *sent);
 
+/*
+ * Log-safe summary of a reply body that is not post.php's JSON (hosting error
+ * page, PHP error text): HTML tags, <style>/<script> content and &entities;
+ * removed, characters outside [A-Za-z0-9 .,:;/()[]'_-] turned into blanks
+ * (never '=', so no bench-checker key=value token), blank runs collapsed,
+ * trimmed, cut to size - 1. Returns the length written (0 for an empty or
+ * NULL body), or -1 if dst is NULL or size is 0.
+ */
+int web_payload_body_excerpt(char *dst, size_t size, const char *body);
+
 #ifdef __cplusplus
 }
 #endif
