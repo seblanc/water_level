@@ -99,6 +99,11 @@ Run #25, REVIEW phase (attempt 18), 2026-10-18: **Build #29 (`c1ce20e`) complete
 firmware. The 12:55 acceptance report is an eighth `http 500` with no W line text. No source
 change; the blockers are unchanged.
 
+Run #25, REVIEW phase (attempt 20), 2026-10-18: **Build #30 (`71476c0`) completed**
+(artifact `nostromo-firmware-30`, 36010768 B). Docs-only commit, so #22–#30 contain the same
+firmware. The 13:01 acceptance report is a ninth `http 500` with no W line text. No source
+change; the blockers are unchanged.
+
 Run #18, REVIEW phase, 2026-10-17: operator asked for the hostname `espwatertank` (R-12).
 **Build #17 (`080af2e`, current HEAD, clean worktree) completed** (artifact
 `nostromo-firmware-17`, 35936529 B, 1372 files), so the change compiles and links. Static
@@ -506,6 +511,8 @@ operator-defined (verification spec rev 3).
 | 2026-10-18 | Platform acceptance run (guidance timestamp 12:48; image not named in the report) | Hardware UART + manual checks | **FAILED** a seventh time with `uart_http`: "Device reported HTTP statuses: [500]"; other 11 checks `not_verified`. No W line text in the report, so the server-side cause is still unknown | Same as 12:12–12:40: needs the run #23 `post.php` uploaded and the device's `web: post …` / `web: page …` lines captured |
 | 2026-10-18 | V-01 | Build #29 (`c1ce20e`, run #25 review attempt 16 commit; only `VERIFICATION_MATRIX.md` changed since `8935375`, so same firmware as #22–#28) | **CI job COMPLETED**. Same firmware conclusions as #22. Compilation evidence only; not flashed | "Artifact nostromo-firmware-29 has been successfully uploaded! Final size is 36010749 bytes. Artifact ID is 12136889750"; zip SHA256 `59d74c0ecef059f77d9031219a0715c15fc2389cbc2d73c42e03d0151561f5e5`; 1372 files |
 | 2026-10-18 | Platform acceptance run (guidance timestamp 12:55; image not named in the report) | Hardware UART + manual checks | **FAILED** an eighth time with `uart_http`: "Device reported HTTP statuses: [500]"; other 11 checks `not_verified`. No W line text in the report, so the server-side cause is still unknown | Same as 12:12–12:48: needs the run #23 `post.php` uploaded and the device's `web: post …` / `web: page …` lines captured |
+| 2026-10-18 | V-01 | Build #30 (`71476c0`, run #25 review attempt 18 commit; only `VERIFICATION_MATRIX.md` changed since `8935375`, so same firmware as #22–#29) | **CI job COMPLETED**. Same firmware conclusions as #22. Compilation evidence only; not flashed | "Artifact nostromo-firmware-30 has been successfully uploaded! Final size is 36010768 bytes. Artifact ID is 12137304093"; zip SHA256 `48348171fa749c957d3b3579f77f2d9b94a041dd79c8691413aabeb641446730`; 1372 files |
+| 2026-10-18 | Platform acceptance run (guidance timestamp 13:01; image not named in the report) | Hardware UART + manual checks | **FAILED** a ninth time with `uart_http`: "Device reported HTTP statuses: [500]"; other 11 checks `not_verified`. No W line text in the report, so the server-side cause is still unknown | Same as 12:12–12:55: needs the run #23 `post.php` uploaded and the device's `web: post …` / `web: page …` lines captured |
 
 No other check has been executed. No build result exists for commits `184d5de`,
 `7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and
