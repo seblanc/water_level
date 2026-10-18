@@ -44,10 +44,10 @@ Expected reply (since run #20):
 `{"ok":true,"stored":true,"id":<new row id>,"rows":<rows in table>,"distance_mm":175,"uptime_s":120,"level_pct":50.0}`
 (PHP 7.1+; older PHP prints `50`). `post.php` reads the new row back from the database and
 only answers `"ok":true` when the stored values match the request; otherwise it answers
-500 `{"ok":false,"error":"readback"}`. The firmware checks the echoed `distance_mm` and
+500 `{"ok":false,"error":"readback <field>"}`. The firmware checks the echoed `distance_mm` and
 `uptime_s` against what it sent and only then logs the post as stored. The page header of the history
 chart shows how many readings arrived in the selected period. Wrong key → 401, missing/invalid field → 400,
-database problem → 500 (details in the server's PHP error log).
+database problem → 500 with a short cause (table below; full message in the server's PHP error log).
 
 ### HTTP 500: what the `error` text means (since run #23)
 
@@ -63,6 +63,7 @@ The ESP32 prints it in its UART line `web: post rejected: http 500 (<error>)`.
 | `database insert 42S22 1054` | Table from an older version lacks a column | Add the column (see `db.php`) or drop the empty table |
 | `readback <field>` | Row stored, but read back with another value | Check column types against `db.php` |
 | `no server message` (firmware text) | PHP did not run or crashed before replying | PHP error log; PHP ≥ 7.4 with PDO needed |
+
 Delete test rows afterwards (`DELETE FROM water_readings WHERE device='0123456789ab'`).
 
 ## Requirements / assumptions
