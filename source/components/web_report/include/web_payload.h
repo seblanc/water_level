@@ -97,6 +97,48 @@ web_store_t web_payload_check_stored(const web_reply_t *reply, const web_post_t 
  */
 int web_payload_body_excerpt(char *dst, size_t size, const char *body);
 
+/* ---- page check: what the web page (index.php, fed by api.php) shows ---- */
+
+/* Query appended to the page directory; one hour keeps the reply ~1.5 KB. */
+#define WEB_PAGE_API_QUERY "api.php?hours=1"
+
+/*
+ * Directory of the post URL, i.e. the address of the web page:
+ * "https://randoresto.ch/water/post.php?x" -> "https://randoresto.ch/water/".
+ * A URL with no path ("https://host") gets a '/' added. Returns the length
+ * (without NUL), or -1 if the URL has no "://", dst is too small or an
+ * argument is NULL.
+ */
+int web_payload_page_dir(char *dst, size_t size, const char *post_url);
+
+/*
+ * Fields of the api.php reply:
+ *   {"ok":true,"latest":{"status":..,"distance_cm":N.N|null,"uptime_s":N,
+ *    "device":"..",..}|null,"history":[..],"hours":1,"count":N,..}
+ */
+typedef struct {
+    bool ok;              /* "ok":true present */
+    bool has_latest;      /* "latest" is an object (false: null, the table is empty) */
+    char device[WEB_PAYLOAD_DEVICE_LEN];  /* latest.device, "" if absent */
+    int64_t distance_mm;  /* latest.distance_cm * 10, -1 if null or absent */
+    int64_t uptime_s;     /* latest.uptime_s, -1 if null or absent */
+    int64_t count;        /* readings in the period, -1 if absent (body cut off) */
+    char error[WEB_REPLY_ERROR_LEN];  /* "error" string, as in web_reply_t */
+} web_page_t;
+
+/* Returns 0 when "ok":true was found, -1 otherwise. out is always filled when non-NULL. */
+int web_payload_parse_page(const char *body, web_page_t *out);
+
+typedef enum {
+    WEB_PAGE_SHOWS_POST,  /* latest row = this device, same uptime_s and distance */
+    WEB_PAGE_OTHER,       /* latest row is another reading */
+    WEB_PAGE_EMPTY,       /* "latest":null: the page reads a table with no rows */
+    WEB_PAGE_FAILED,      /* no "ok":true (or NULL arguments) */
+} web_page_check_t;
+
+/* Compare the page's latest reading with the post that was just stored. */
+web_page_check_t web_payload_check_page(const web_page_t *page, const web_post_t *sent);
+
 #ifdef __cplusplus
 }
 #endif

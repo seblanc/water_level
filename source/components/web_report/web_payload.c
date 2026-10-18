@@ -309,3 +309,109 @@ int web_payload_body_excerpt(char *dst, size_t size, const char *body)
     dst[n] = '\0';
     return (int)n;
 }
+
+/* ---- page check ---- */
+
+/* api.php's "latest" object is ~250 bytes of flat JSON. */
+#define PAGE_LATEST_MAX 384
+
+int web_payload_page_dir(char *dst, size_t size, const char *post_url)
+{
+    if (dst == NULL || size == 0 || post_url == NULL) {
+        return -1;
+    }
+    dst[0] = '\0';
+    const char *end = post_url + strcspn(post_url, "?#");  /* the path stops at the query */
+    const char *host = strstr(post_url, "://");
+    if (host == NULL || host + 3 > end) {
+        return -1;
+    }
+    const char *slash = NULL;
+    for (const char *p = host + 3; p < end; p++) {
+        if (*p == '/') {
+            slash = p;
+        }
+    }
+    size_t n = (slash != NULL) ? (size_t)(slash - post_url + 1) : (size_t)(end - post_url);
+    bool add_slash = (slash == NULL);
+    if (n + (add_slash ? 1 : 0) + 1 > size) {
+        return -1;
+    }
+    memcpy(dst, post_url, n);
+    if (add_slash) {
+        dst[n++] = '/';
+    }
+    dst[n] = '\0';
+    return (int)n;
+}
+
+/* Non-negative decimal in tenths ("12.3" -> 123, "12" -> 120), -1 if null or absent. */
+static int64_t json_tenths(const char *body, const char *name)
+{
+    const char *v = json_value(body, name);
+    if (v == NULL || *v < '0' || *v > '9') {
+        return -1;
+    }
+    char *end;
+    int64_t tenths = (int64_t)strtoll(v, &end, 10) * 10;
+    if (end[0] == '.' && end[1] >= '0' && end[1] <= '9') {
+        tenths += end[1] - '0';
+    }
+    return tenths;
+}
+
+int web_payload_parse_page(const char *body, web_page_t *out)
+{
+    if (out == NULL) {
+        return -1;
+    }
+    out->ok = false;
+    out->has_latest = false;
+    out->device[0] = '\0';
+    out->distance_mm = -1;
+    out->uptime_s = -1;
+    out->count = -1;
+    out->error[0] = '\0';
+    if (body == NULL) {
+        return -1;
+    }
+    out->ok = json_true(body, "ok");
+    out->count = json_int(body, "count");
+    json_safe_str(body, "error", out->error, sizeof(out->error));
+
+    /* Scan only inside "latest" so its keys cannot be taken from elsewhere. */
+    const char *v = json_value(body, "latest");
+    if (v != NULL && *v == '{') {
+        char latest[PAGE_LATEST_MAX];
+        const char *close = strchr(v, '}');
+        size_t n = (close != NULL) ? (size_t)(close - v + 1) : strlen(v);
+        if (n >= sizeof(latest)) {
+            n = sizeof(latest) - 1;
+        }
+        memcpy(latest, v, n);
+        latest[n] = '\0';
+        out->has_latest = true;
+        json_safe_str(latest, "device", out->device, sizeof(out->device));
+        out->distance_mm = json_tenths(latest, "distance_cm");
+        out->uptime_s = json_int(latest, "uptime_s");
+    }
+    return out->ok ? 0 : -1;
+}
+
+web_page_check_t web_payload_check_page(const web_page_t *page, const web_post_t *sent)
+{
+    if (page == NULL || sent == NULL || !page->ok) {
+        return WEB_PAGE_FAILED;
+    }
+    if (!page->has_latest) {
+        return WEB_PAGE_EMPTY;
+    }
+    /* The page shows whole millimetres as distance_cm with one decimal, so the
+     * value survives the round trip exactly; NO_DATA is null on both sides. */
+    int64_t sent_dist = sent->distance_mm >= 0 ? sent->distance_mm : -1;
+    if (sent->device == NULL || strcmp(page->device, sent->device) != 0 ||
+        page->uptime_s != (int64_t)sent->uptime_s || page->distance_mm != sent_dist) {
+        return WEB_PAGE_OTHER;
+    }
+    return WEB_PAGE_SHOWS_POST;
+}

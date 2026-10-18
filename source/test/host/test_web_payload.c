@@ -265,6 +265,102 @@ static void test_body_excerpt(void)
     CHECK(web_payload_body_excerpt(NULL, sizeof(out), "x") == -1);
 }
 
+static void test_page_dir(void)
+{
+    char buf[64];
+    int n = web_payload_page_dir(buf, sizeof(buf), "https://randoresto.ch/water/post.php");
+    CHECK_STR(n, buf, "https://randoresto.ch/water/");
+    n = web_payload_page_dir(buf, sizeof(buf), "http://h/a/b/post.php?x=/y#z");
+    CHECK_STR(n, buf, "http://h/a/b/");
+    n = web_payload_page_dir(buf, sizeof(buf), "https://host");
+    CHECK_STR(n, buf, "https://host/");
+    n = web_payload_page_dir(buf, sizeof(buf), "https://host?q=1");
+    CHECK_STR(n, buf, "https://host/");
+
+    CHECK(web_payload_page_dir(buf, sizeof(buf), "randoresto.ch/water/post.php") == -1);
+    CHECK(buf[0] == '\0');
+    CHECK(web_payload_page_dir(buf, sizeof(buf), "post.php?u=http://x/") == -1);
+    /* "http://h/" needs 10 bytes with NUL. */
+    CHECK(web_payload_page_dir(buf, 10, "http://h/p.php") == 9);
+    CHECK(web_payload_page_dir(buf, 9, "http://h/p.php") == -1);
+    CHECK(web_payload_page_dir(buf, 9, "http://h") == -1);
+    CHECK(web_payload_page_dir(NULL, 9, "http://h") == -1);
+    CHECK(web_payload_page_dir(buf, sizeof(buf), NULL) == -1);
+}
+
+/* api.php reply as json_encode writes it (sample(): a1b2c3d4e5f6, 1750 mm, 3600 s). */
+#define PAGE_LATEST                                                                   \
+    "{\"received_at\":1760788800,\"received_iso\":\"2026-10-18T12:00:00+00:00\","     \
+    "\"age_s\":2,\"stale\":false,\"status\":\"OK\",\"distance_cm\":175.0,"             \
+    "\"level_pct\":41.7,\"rssi\":-61,\"uptime_s\":3600,\"fw\":\"0.3.0\","              \
+    "\"device\":\"a1b2c3d4e5f6\"}"
+
+static void test_parse_page(void)
+{
+    web_page_t g;
+    CHECK(web_payload_parse_page("{\"ok\":true,\"latest\":" PAGE_LATEST
+                                 ",\"history\":[[1760788770,41.7]],\"hours\":1,\"count\":57,"
+                                 "\"empty_cm\":30,\"full_cm\":5}", &g) == 0);
+    CHECK(g.ok && g.has_latest && g.count == 57);
+    CHECK(strcmp(g.device, "a1b2c3d4e5f6") == 0);
+    CHECK(g.distance_mm == 1750 && g.uptime_s == 3600 && g.error[0] == '\0');
+
+    /* Decimals, null distance, body cut off in the history (no count). */
+    CHECK(web_payload_parse_page("{\"ok\":true,\"latest\":{\"distance_cm\":12.3,\"uptime_s\":5,"
+                                 "\"device\":\"x\"},\"history\":[[1,2],[3", &g) == 0);
+    CHECK(g.distance_mm == 123 && g.uptime_s == 5 && g.count == -1);
+    web_payload_parse_page("{\"ok\":true,\"latest\":{\"distance_cm\":12,\"uptime_s\":null}}", &g);
+    CHECK(g.distance_mm == 120 && g.uptime_s == -1 && g.device[0] == '\0');
+    web_payload_parse_page("{\"ok\":true,\"latest\":{\"distance_cm\":null}}", &g);
+    CHECK(g.has_latest && g.distance_mm == -1);
+
+    /* Keys outside "latest" are not taken for it. */
+    web_payload_parse_page("{\"ok\":true,\"uptime_s\":3600,\"latest\":null,\"count\":0}", &g);
+    CHECK(g.ok && !g.has_latest && g.uptime_s == -1 && g.count == 0);
+
+    CHECK(web_payload_parse_page("{\"ok\":false,\"error\":\"database\"}", &g) == -1);
+    CHECK(!g.ok && strcmp(g.error, "database") == 0);
+    CHECK(web_payload_parse_page("<html>Not Found</html>", &g) == -1);
+    CHECK(web_payload_parse_page(NULL, &g) == -1 && !g.has_latest && g.count == -1);
+    CHECK(web_payload_parse_page("{\"ok\":true}", NULL) == -1);
+}
+
+static void test_check_page(void)
+{
+    web_post_t p = sample();
+    web_page_t g;
+
+    web_payload_parse_page("{\"ok\":true,\"latest\":" PAGE_LATEST ",\"count\":1}", &g);
+    CHECK(web_payload_check_page(&g, &p) == WEB_PAGE_SHOWS_POST);
+
+    /* Another reading: other uptime, distance or device. */
+    p.uptime_s = 3601;
+    CHECK(web_payload_check_page(&g, &p) == WEB_PAGE_OTHER);
+    p = sample();
+    p.distance_mm = 1751;
+    CHECK(web_payload_check_page(&g, &p) == WEB_PAGE_OTHER);
+    p = sample();
+    p.device = "a1b2c3d4e5f7";
+    CHECK(web_payload_check_page(&g, &p) == WEB_PAGE_OTHER);
+    p = sample();
+
+    /* NO_DATA: empty distance sent, null shown. */
+    web_payload_parse_page("{\"ok\":true,\"latest\":{\"distance_cm\":null,\"uptime_s\":3600,"
+                           "\"device\":\"a1b2c3d4e5f6\"}}", &g);
+    CHECK(web_payload_check_page(&g, &p) == WEB_PAGE_OTHER);
+    p.distance_mm = -1;
+    p.status = "NO_DATA";
+    CHECK(web_payload_check_page(&g, &p) == WEB_PAGE_SHOWS_POST);
+    p = sample();
+
+    web_payload_parse_page("{\"ok\":true,\"latest\":null,\"count\":0}", &g);
+    CHECK(web_payload_check_page(&g, &p) == WEB_PAGE_EMPTY);
+    web_payload_parse_page("{\"ok\":false,\"error\":\"database\"}", &g);
+    CHECK(web_payload_check_page(&g, &p) == WEB_PAGE_FAILED);
+    CHECK(web_payload_check_page(NULL, &p) == WEB_PAGE_FAILED);
+    CHECK(web_payload_check_page(&g, NULL) == WEB_PAGE_FAILED);
+}
+
 int main(void)
 {
     test_urlencode();
@@ -275,6 +371,9 @@ int main(void)
     test_parse_reply();
     test_check_stored();
     test_body_excerpt();
+    test_page_dir();
+    test_parse_page();
+    test_check_page();
 
     if (s_failures != 0) {
         fprintf(stderr, "test_web_payload: %d of %d checks FAILED\n", s_failures, s_checks);
