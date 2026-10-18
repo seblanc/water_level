@@ -25,7 +25,9 @@ found no mismatch, but the test was not run. One defect was fixed: only the firs
 of the reply are kept, so a page that opens with a long `<style>` block leaves no text in
 the excerpt, and the W line then said `empty body` even though the body was not empty. It
 now says `no text in first <n> bytes` in that case and `empty body` only when nothing was
-received (`web_report.c`). **This fix is newer than Build #20 and has not been compiled.**
+received (`web_report.c`). This fix (commit `cc81c1e`) was compiled by **Build #21**
+(artifact `nostromo-firmware-21`, 35959671 B, 1372 files). Use artifact -21 for the next
+flash. Not flashed; host tests not run.
 Known limit, not changed: a lone `<` in plain text makes the excerpt skip to the next `>`,
 or end there if there is none.
 
@@ -418,6 +420,7 @@ operator-defined (verification spec rev 3).
 | 2026-10-18 | Platform acceptance run (run #22/#23 objective "reflash and perform the tests"; image not named in the report) | Hardware UART + manual checks | **FAILED**. `uart_http`: "Device reported HTTP statuses: [500]". The other 11 web/server checks were `not_verified` (they need server logs, a DB query or a browser). The report does not include the `error` text from the device's `post rejected` line, so the 500 cause (config, DB access, schema or readback) is unknown | Run #23 response: `post.php` now names the failing stage, SQLSTATE and driver code, or the readback field, in the 500 reply, and returns `server not configured` for a placeholder `config.php`. A failed prune no longer turns a stored row into a 500. Server upload is an operator action |
 | 2026-10-18 | V-01 | Build #19 (`1b8def9`, run #23; firmware sources unchanged since Build #18, only `web/water/` PHP and docs changed) | **CI job COMPLETED**. Same firmware conclusions as #18. Compilation evidence only; not flashed. CI does not run or deploy PHP, so the run #23 `post.php` is still unexecuted | "Artifact nostromo-firmware-19 has been successfully uploaded! Final size is 35947412 bytes. Artifact ID is 12135321073"; zip SHA256 `51bd428f360045855a1d2d1116b60e3430b12e5fe6ca5ac5ca5fd9d7940ccc1e`; 1372 files |
 | 2026-10-18 | V-01 | Build #20 (`4ab482d`, first build with run #24 `web_payload_body_excerpt()` and the `reply not from post.php (<text>)` W line) | **CI job COMPLETED**. Compile, link and partition fit implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only; not flashed; host tests not run by CI. The run #24 review fix in `web_report.c` came later and is not in this build | "Artifact nostromo-firmware-20 has been successfully uploaded! Final size is 35959118 bytes. Artifact ID is 12135461177"; zip SHA256 `adfe706b0aa2429eb0dd3d2813cd6d9e09a8d9354f840ee966e557009de08095`; 1372 files |
+| 2026-10-18 | V-01 | Build #21 (`cc81c1e`, adds the run #24 review fix: `no text in first <n> bytes` instead of `empty body`) | **CI job COMPLETED**. Compile, link and partition fit implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only; not flashed; host tests not run by CI | "Artifact nostromo-firmware-21 has been successfully uploaded! Final size is 35959671 bytes. Artifact ID is 12135916546"; zip SHA256 `c666617e67233a51a606722bb6e5d431300b071355bf168127e777baf8ebd923`; 1372 files |
 
 No other check has been executed. No build result exists for commits `184d5de`,
 `7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and
