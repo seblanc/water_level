@@ -132,7 +132,8 @@ succeeds appends `, after <k> failed tries`. On errors you see `web: post failed
 `web: post rejected: row <id> read back with other values (…)` or
 `web: post rejected: http <code>, reply not from post.php (<body text>)` (hosting error
 page, PHP fatal error or PHP not executed; since run #24 the start of the body is shown,
-tags and `=` removed, at most 95 characters, `empty body` if there was none). One W line per outage; retries every 15 s. The key and the Wi-Fi password are never logged.
+tags and `=` removed, at most 95 characters, `empty body` if there was none, `no text in first <n> bytes` if the 319 bytes kept were
+all markup, e.g. a long `<style>` block). One W line per outage; retries every 15 s. The key and the Wi-Fi password are never logged.
 
 **Credentials in `sdkconfig.defaults`:** at the operator's request, the Wi-Fi SSID and
 password and the web API key are in `sdkconfig.defaults` so that CI artifacts work

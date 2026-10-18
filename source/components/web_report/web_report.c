@@ -258,7 +258,13 @@ static void post_task(void *arg)
                     /* Not post.php's JSON (hosting error page, PHP fatal error,
                      * unexecuted file): show the start of the body instead. */
                     char excerpt[WEB_EXCERPT_LEN];
-                    if (web_payload_body_excerpt(excerpt, sizeof(excerpt), s_body.buf) <= 0) {
+                    int n = web_payload_body_excerpt(excerpt, sizeof(excerpt), s_body.buf);
+                    if (n <= 0 && s_body.len > 0) {
+                        /* Only the first 319 bytes are kept: a long <style> header
+                         * can leave no text in them although the body was not empty. */
+                        snprintf(excerpt, sizeof(excerpt), "no text in first %d bytes",
+                                 s_body.len);
+                    } else if (n <= 0) {
                         strlcpy(excerpt, "empty body", sizeof(excerpt));
                     }
                     ESP_LOGW(TAG, "post rejected: http %d, reply not from post.php (%s)", status,
