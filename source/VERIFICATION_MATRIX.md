@@ -69,6 +69,11 @@ from the server, so a firmware change cannot fix it. No source change in this at
 Blockers, all operator actions: upload the `web/water/` PHP (run #23 diagnostics) with a real
 `config.php`, flash -22/-23, and capture the `web: post …` / `web: page …` lines.
 
+Run #25, REVIEW phase (attempt 8), 2026-10-18: **Build #24 (`2351270`) completed**
+(artifact `nostromo-firmware-24`, 36010754 B). Again only this file changed since `8935375`, so
+#22, #23 and #24 contain the same firmware. The 12:19 acceptance report repeats `http 500`
+with no W line text. No source change; the blockers listed for attempt 6 are unchanged.
+
 Run #18, REVIEW phase, 2026-10-17: operator asked for the hostname `espwatertank` (R-12).
 **Build #17 (`080af2e`, current HEAD, clean worktree) completed** (artifact
 `nostromo-firmware-17`, 35936529 B, 1372 files), so the change compiles and links. Static
@@ -464,6 +469,8 @@ operator-defined (verification spec rev 3).
 | 2026-10-18 | V-01 | Build #22 (`8935375`, first build with the run #25 page check `web: page ok:` and the 2048 B reply buffer) | **CI job COMPLETED**. Compile, link and partition fit implied by the uploaded artifact. Warning scan and image size not in the excerpt. Compilation evidence only; not flashed; host tests (V-25a) not run by CI | "Artifact nostromo-firmware-22 has been successfully uploaded! Final size is 36010734 bytes. Artifact ID is 12136251962"; zip SHA256 `650ebb19dd204bf4b7c3237d92061647f4f6497796a58ce017f2586548022d81`; 1372 files |
 | 2026-10-18 | Platform acceptance run (guidance timestamp 12:12; image not named in the report) | Hardware UART + manual checks | **FAILED** again with `uart_http`: "Device reported HTTP statuses: [500]"; other 11 checks `not_verified`. The report again omits the device's W line text, so the cause is still unknown. It is not stated whether the flashed image had the run #24 excerpt (Build #20 or later) | No firmware change can fix a server-side 500. The `post rejected` W line from artifact -22/-23 plus the run #23 `post.php` (once uploaded) names the cause |
 | 2026-10-18 | V-01 | Build #23 (`7e0734d`, run #25 review commit; only `VERIFICATION_MATRIX.md` changed since `8935375`, so same firmware as #22) | **CI job COMPLETED**. Same firmware conclusions as #22. Compilation evidence only; not flashed | "Artifact nostromo-firmware-23 has been successfully uploaded! Final size is 36010757 bytes. Artifact ID is 12135684969"; zip SHA256 `80311395a84c17c3c3d28aa6930c4fe08eef7a4febec20c5cebdfcdbb94ba54f`; 1372 files |
+| 2026-10-18 | Platform acceptance run (guidance timestamp 12:19; image not named in the report) | Hardware UART + manual checks | **FAILED** a third time with `uart_http`: "Device reported HTTP statuses: [500]"; other 11 checks `not_verified`. Again no W line text in the report, so the server-side cause is still unknown | Same as 12:12: needs the run #23 `post.php` uploaded and the device's `web: post rejected` line captured |
+| 2026-10-18 | V-01 | Build #24 (`2351270`, run #25 review attempt 6 commit; only `VERIFICATION_MATRIX.md` changed since `8935375`, so same firmware as #22/#23) | **CI job COMPLETED**. Same firmware conclusions as #22. Compilation evidence only; not flashed | "Artifact nostromo-firmware-24 has been successfully uploaded! Final size is 36010754 bytes. Artifact ID is 12136636472"; zip SHA256 `981f1d1e205179be7663d3688348815708d577f45efd71f7c40b1bf2998d347d`; 1372 files |
 
 No other check has been executed. No build result exists for commits `184d5de`,
 `7bac3ea`, `bba5d98`, `84d1412`, `30c9833`, `9ecc02d` or `2c139be` (`9ecc02d` and
